@@ -1,6 +1,6 @@
 {
   "name": "chinese-localiser",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "多工具中文本地化管理软件：检测安装、查看汉化状态、应用与卸载汉化",
   "desktopName": "chinese-localiser.desktop",

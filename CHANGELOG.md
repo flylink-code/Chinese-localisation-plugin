@@ -2,6 +2,10 @@
 
 本文件记录面向用户的版本变更。版本号与 GitHub Release 标签使用同一套语义化版本（`vX.Y.Z`）。
 
+## 0.1.2 — 2026年11月04日
+
+- 修复打开 Claude Desktop 详情时整个界面变黑：该适配器返回的检测结果缺少 `evidence` 字段，导致详情页渲染中断；现补齐该字段并新增回归测试。
+
 ## 0.1.1 — 2026年11月04日
 
 - 新增 Ubuntu 22.04 支持：Claude Code CLI 检测、应用汉化与卸载汉化闭环；Claude Desktop deb 与 Antigravity Linux 安装路径检测。

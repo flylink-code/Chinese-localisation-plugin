@@ -48,7 +48,7 @@ If your environment sets `ELECTRON_RUN_AS_NODE=1`, launch with `env -u ELECTRON_
 - `app/package.json` `version` is the single source of truth; the UI and update check read it.
 - To release: bump the version and [CHANGELOG.md](CHANGELOG.md), commit, tag `vX.Y.Z`, and publish a GitHub Release with the same tag.
 - The Settings update check only reads the latest Release version and opens its page; it never downloads or replaces files.
-- Current version is `0.1.1`, with Windows and Ubuntu installers. Pushing a `vX.Y.Z` tag builds and uploads them via GitHub Actions.
+- Current version is `0.1.2`, with Windows and Ubuntu installers. Pushing a `vX.Y.Z` tag builds and uploads them via GitHub Actions.
 
 ## Scope and safety
 
