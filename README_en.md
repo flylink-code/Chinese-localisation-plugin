@@ -15,10 +15,10 @@ A desktop app that detects installed instances of Claude Code, Claude Desktop, a
 | Localization status | Done | Distinguishes not localized, managed by this app, external localization, config error, and unconfirmed Chinese resources |
 | Apply localization (Claude Code) | Done | Copies the bundled `cc-zh` plugin, merges user-level `settings.json`, backs up first; Windows and Linux |
 | Uninstall localization (Claude Code) | Done | Removes only entries written by this app; keeps other plugins and later user edits |
-| GitHub update check | Done | Manual check of the latest Release from Settings; opens the release page, never downloads or installs |
+| Update check and install | Done | Automatic check on startup (can be disabled); user-confirmed download with metadata hash verification, then a second confirmation to install; optional GitHub mirror |
 | Windows / Ubuntu installers | Done | NSIS `.exe`, AppImage, `.deb`; unsigned, built locally or by GitHub Actions |
 | Desktop / Antigravity writes | Not implemented | Detect-only; reference installers are never executed |
-| Auto-update | Not implemented | Update check only reports the version and opens the release page |
+| Silent auto-update | Not implemented | Both download and install require user confirmation; never installs on quit |
 
 ## Quick start
 
@@ -47,8 +47,10 @@ If your environment sets `ELECTRON_RUN_AS_NODE=1`, launch with `env -u ELECTRON_
 
 - `app/package.json` `version` is the single source of truth; the UI and update check read it.
 - To release: bump the version and [CHANGELOG.md](CHANGELOG.md), commit, tag `vX.Y.Z`, and publish a GitHub Release with the same tag.
-- The Settings update check only reads the latest Release version and opens its page; it never downloads or replaces files.
-- Current version is `0.1.2`, with Windows and Ubuntu installers. Pushing a `vX.Y.Z` tag builds and uploads them via GitHub Actions.
+- Settings checks for the latest version; "Download update" verifies the sha512 in the update metadata; "Install and restart" runs only after user confirmation and never installs on quit.
+- Custom GitHub mirrors are supported: the mirror must serve `latest.yml` (`latest-linux.yml` on Linux) plus installers, and is used for both version checks and downloads. A mirror can replace update content, so only trusted addresses should be configured.
+- The release workflow verifies and uploads `latest.yml` / `latest-linux.yml`; a build fails when the metadata is missing.
+- Current version is `0.1.3`, with Windows and Ubuntu installers. Pushing a `vX.Y.Z` tag builds and uploads them via GitHub Actions.
 
 ## Scope and safety
 
@@ -56,7 +58,7 @@ If your environment sets `ELECTRON_RUN_AS_NODE=1`, launch with `env -u ELECTRON_
 - Only user-visible text is localized; JSON keys, enum values, env var names, tool names, commands, and paths stay unchanged.
 - Uninstall restores only changes this app can verify; it never uninstalls the target software or deletes user data.
 - External localization, unknown versions, unreadable configuration, and missing backups disable writes.
-- Offline by default; the only network call is the user-triggered GitHub Releases version check, which uploads no local data. No telemetry, remote upload, or online translation.
+- Offline by default; network requests happen only for the startup version check, a manual check, or a user-confirmed update download. A configured mirror receives those requests. No telemetry, remote upload, or online translation.
 
 Verification level matters: environment-isolated apply/uninstall runs are not the same as confirming the localized UI in a real client. See [doc/support-matrix.md](doc/support-matrix.md) for exactly what was verified.
 

@@ -2,7 +2,7 @@
 
 面向 Claude Code、Claude Desktop、Antigravity 等工具的本地化管理桌面应用，支持 Windows 与 Ubuntu。主页检测本机已安装实例、展示汉化状态，并按适配能力提供应用汉化与卸载汉化（恢复原文，不卸载目标软件）。
 
-> 当前为可运行 MVP：三类软件的真实安装检测、汉化状态检查已接入；Claude Code CLI 通过官方插件扩展点完成应用与卸载汉化闭环；Claude Desktop、Antigravity 目前仅支持检测与状态查看。已发布 0.1.2，包含 Windows 与 Ubuntu 安装包。支持的版本与验证范围见 [支持矩阵](doc/support-matrix.md)。
+> 当前为可运行 MVP：三类软件的真实安装检测、汉化状态检查已接入；Claude Code CLI 通过官方插件扩展点完成应用与卸载汉化闭环；Claude Desktop、Antigravity 目前仅支持检测与状态查看。已发布 0.1.3，包含 Windows 与 Ubuntu 安装包。支持的版本与验证范围见 [支持矩阵](doc/support-matrix.md)。
 
 ## 1. 已实现能力
 
@@ -15,18 +15,18 @@
 | 汉化状态检查 | 已实现 | 区分未汉化、本软件汉化、外部汉化、配置异常、中文资源待确认 |
 | Claude Code 应用汉化 | 已实现 | 复制内置 `cc-zh` 插件到应用数据目录，合并用户级 `settings.json`，写前备份；Windows / Linux |
 | Claude Code 卸载汉化 | 已实现 | 只移除本软件写入的插件目录配置，保留其他插件和用户后续修改 |
+| 更新检查与安装 | 已实现 | 启动时自动检查（可关闭）；用户确认后下载并校验元数据哈希，再次确认后安装；支持 GitHub 镜像 |
 | 操作记录 | 已实现 | 记录应用/卸载结果，不保存配置内容或敏感信息 |
-| GitHub 更新检查 | 已实现 | 设置页手动检查最新 Release 并打开发布页；不自动下载或安装 |
 | Windows / Ubuntu 安装包 | 已实现 | NSIS `.exe`、AppImage、`.deb`；未签名，由 GitHub Actions 或本地构建 |
 | Desktop / Antigravity 汉化写入 | 未实现 | 仅检测；不调用参考项目安装脚本，避免签名、权限和升级回滚风险 |
-| 自动更新 | 未实现 | 更新检查只提示版本并打开发布页 |
+| 自动静默更新 | 未实现 | 下载与安装均需用户确认，退出时不自动安装 |
 
 ### 验证范围
 
 - 已在 Windows 11 实机完成三类软件的真实只读检测（Claude Code CLI 2.1.316、Claude Desktop 4.4212.0、Antigravity 2.27.0）。
 - 已在隔离用户目录完成 Claude Code「应用汉化 → 状态刷新 → 卸载汉化 → 原配置恢复」流程验证，未修改本机真实用户配置。
 - 已在 WSL Ubuntu 22.04 的隔离 HOME 中验证 Linux 检测路径及 Claude Code 应用/卸载闭环；AppImage 与 deb 在 WSL 中构建成功。
-- 已验证更新检查逻辑（设置页与共用函数一致）：`0.1.1` 能识别最新 `0.1.2`，设置页 `0.1.2` 显示已是最新；设置页在无 Release 时的提示已通过界面截图核对。
+- 已验证更新链路（`0.1.2` 打包应用 + 本地 HTTPS 镜像）：保存镜像地址、检查到新版本、下载并完成 sha512 校验，设置页「已下载」状态截图核对通过；GitHub 官方源路径已确认会读取 Release 的 `latest.yml`。真实安装包覆盖安装与重启、AppImage 自动替换尚未验证。
 - **尚未验证** Claude Code 启动后的中文界面效果、真实用户默认配置下的应用、Desktop / Antigravity 写入、安装包在干净 Windows / Ubuntu 机器上的安装与启动、macOS 支持。
 
 ## 2. 快速开始
@@ -35,8 +35,8 @@
 
 从 [GitHub Releases](https://github.com/flylink-code/Chinese-localisation-plugin/releases) 下载：
 
-- Windows：`ChineseLocaliser-0.1.2-windows-x64.exe`（NSIS 安装包）。
-- Ubuntu：`ChineseLocaliser-0.1.2-linux-x86_64.AppImage` 或 `ChineseLocaliser-0.1.2-linux-amd64.deb`。
+- Windows：`ChineseLocaliser-0.1.3-windows-x64.exe`（NSIS 安装包）。
+- Ubuntu：`ChineseLocaliser-0.1.3-linux-x86_64.AppImage` 或 `ChineseLocaliser-0.1.3-linux-amd64.deb`。
 
 安装包未签名：Windows SmartScreen 与部分 Linux 桌面环境会提示来源未知，请自行核对 Release 页面与文件哈希。Ubuntu 22.04 运行 AppImage 需要 `libfuse2`；AppImage 桌面入口使用 `--no-sandbox`（Electron AppImage 的启动限制），需要完整 Chromium 沙箱时请使用 deb。安装包内置构建时同版本的 `cc-zh` 插件。
 
@@ -73,8 +73,10 @@ env -u ELECTRON_RUN_AS_NODE npm start
 
 - `app/package.json` 的 `version` 是唯一版本来源，界面与更新检查均读取该值。
 - 发布步骤：更新版本号与 [CHANGELOG.md](CHANGELOG.md) → 提交 → 创建 `vX.Y.Z` 标签 → 在 GitHub 创建同名 Release。
-- 设置页「检查更新」只读取最新 Release 的版本号并打开发布页，不自动下载或替换文件。
-- 版本为 `0.1.2`，提供 Windows 与 Ubuntu 安装包；推送 `vX.Y.Z` 标签时由 [GitHub Actions](.github/workflows/build-installers.yml) 构建并上传安装包。
+- 设置页「检查更新」读取最新版本；「下载更新」下载并校验更新元数据中的 sha512；「安装并重启」由用户确认后执行，退出时不自动安装。
+- 支持自定义 GitHub 镜像：镜像需同时提供 `latest.yml`（Linux 为 `latest-linux.yml`）与安装包，版本信息与下载都走镜像；镜像可以替换更新内容，只应填写可信地址。
+- 发布工作流会校验 `latest.yml` / `latest-linux.yml` 并随安装包上传；缺少元数据时构建失败。
+- 版本为 `0.1.3`，提供 Windows 与 Ubuntu 安装包；推送 `vX.Y.Z` 标签时由 [GitHub Actions](.github/workflows/build-installers.yml) 构建并上传安装包。
 
 ## 3. 使用流程与状态
 
@@ -144,7 +146,7 @@ doc/                              任务计划与支持矩阵
 - 只写入应用数据目录与明确的 Claude Code 用户配置；汉化插件来源固定为仓库内置资源。
 - 外部汉化、未知版本、配置无法解析、备份缺失时不提供风险写入入口。
 - 不提交 token、API key、账号配置、真实会话、目标软件私有资源或含个人信息的日志。
-- 默认离线运行；仅在你点击「检查更新」时请求 GitHub Releases API（只读取版本号，不上传本机数据），不引入在线翻译、遥测或远程上传。
+- 默认离线可用；仅在启动自动检查或点击「检查更新」时请求版本信息，下载更新时请求安装包；配置镜像后这些请求发送到该镜像，不上传本机数据，不引入在线翻译或遥测。
 - 不重新分发 Claude Code、Claude Desktop、Antigravity 本体；内置插件的 MIT 许可与来源见 `app/resources/plugins/cc-zh/THIRD_PARTY.md`。本项目与相关厂商无隶属关系。
 
 ## 7. 已知限制
@@ -154,7 +156,8 @@ doc/                              任务计划与支持矩阵
 - Claude Desktop 的 MSIX 安装受系统完整性保护，只能保证检测范围；Linux deb 版补丁需 sudo 修改系统目录，本软件不自动提权，因此不提供写入。
 - Antigravity 仅识别 `app.asar` 注入标记与备份；Linux 版同样未接入 ASAR 注入写入。
 - Windows 与 Ubuntu 安装包均未签名，不能证明来源；请以 Release 页面和哈希为准。
-- 尚未提供自动更新、macOS 验证和界面视觉回归测试；更新检查仅提示版本，安装仍需手动完成。
+- 更新下载只校验更新元数据中的文件哈希，安装包未签名，不能证明来源；镜像可替换更新内容，仅应配置可信地址。
+- 尚未验证真实安装包的自动覆盖安装与重启、AppImage 自动替换、macOS 验证和界面视觉回归测试。
 
 ## 8. 参与开发
 
