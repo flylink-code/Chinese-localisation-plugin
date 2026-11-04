@@ -17,9 +17,9 @@
   "scripts": {
     "sync:plugin": "node scripts/sync-bundled-plugin.cjs",
     "build": "npm run sync:plugin && vite build",
-    "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win",
-    "dist:linux": "npm run build && electron-builder --linux",
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --publish never",
     "start": "electron .",
     "dev": "npm run build && electron .",
     "test": "node --test electron/test/*.test.cjs",
