@@ -2,7 +2,7 @@
 
 面向 Claude Code、Claude Desktop、Antigravity 等工具的本地化管理桌面应用，支持 Windows 与 Ubuntu。主页检测本机已安装实例、展示汉化状态，并按适配能力提供应用汉化与卸载汉化（恢复原文，不卸载目标软件）。
 
-> 当前为可运行 MVP：三类软件的真实安装检测、汉化状态检查已接入；Claude Code CLI 通过官方插件扩展点完成应用与卸载汉化闭环；Claude Desktop、Antigravity 目前仅支持检测与状态查看。Windows 与 Ubuntu 安装包已构建。支持的版本与验证范围见 [支持矩阵](doc/support-matrix.md)。
+> 当前为可运行 MVP：三类软件的真实安装检测、汉化状态检查已接入；Claude Code CLI 通过官方插件扩展点完成应用与卸载汉化闭环；Claude Desktop、Antigravity 目前仅支持检测与状态查看。已发布 0.1.1，包含 Windows 与 Ubuntu 安装包。支持的版本与验证范围见 [支持矩阵](doc/support-matrix.md)。
 
 ## 1. 已实现能力
 
@@ -26,7 +26,7 @@
 - 已在 Windows 11 实机完成三类软件的真实只读检测（Claude Code CLI 2.1.316、Claude Desktop 4.4212.0、Antigravity 2.27.0）。
 - 已在隔离用户目录完成 Claude Code「应用汉化 → 状态刷新 → 卸载汉化 → 原配置恢复」流程验证，未修改本机真实用户配置。
 - 已在 WSL Ubuntu 22.04 的隔离 HOME 中验证 Linux 检测路径及 Claude Code 应用/卸载闭环；AppImage 与 deb 在 WSL 中构建成功。
-- 已实机验证设置页的 GitHub 更新检查：仓库当前无 Release 时界面正确显示「暂无可更新版本」。
+- 已实机验证设置页的 GitHub 更新检查：`0.1.0` 能识别最新 `0.1.1`，`0.1.1` 显示已是最新。
 - **尚未验证** Claude Code 启动后的中文界面效果、真实用户默认配置下的应用、Desktop / Antigravity 写入、安装包在干净 Windows / Ubuntu 机器上的安装与启动、macOS 支持。
 
 ## 2. 快速开始
