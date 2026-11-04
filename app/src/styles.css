@@ -1646,6 +1646,155 @@ code {
   margin-top: 14px;
 }
 
+.nav-dot {
+  margin-left: auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.switch-row > span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.switch-row strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.switch-row small {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.switch-row input[type='checkbox'] {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.switch-row input[type='checkbox']::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease;
+}
+
+.switch-row input[type='checkbox']:checked {
+  background: var(--primary);
+}
+
+.switch-row input[type='checkbox']:checked::after {
+  transform: translateX(16px);
+}
+
+.switch-row input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.mirror-row {
+  margin-top: 16px;
+}
+
+.mirror-row > label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mirror-input {
+  display: flex;
+  gap: 8px;
+}
+
+.mirror-input input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.mirror-input input:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+.mirror-input code,
+.settings-hint code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  font-size: 10.5px;
+}
+
+.update-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.progress-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  transition: width 0.2s ease;
+}
+
+.update-progress > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Toast ---------- */
 
 .toast {

@@ -64,9 +64,46 @@ export interface DetectEvent {
   result?: ToolResult
 }
 
+export interface UpdateConfig {
+  autoCheck: boolean
+  mirror: string
+}
+
+export type UpdatePhase =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'downloaded'
+  | 'up-to-date'
+  | 'error'
+
+export interface UpdateProgress {
+  percent: number
+  transferred: number
+  total: number
+}
+
+export interface UpdateStatus {
+  phase: UpdatePhase
+  currentVersion: string
+  latestVersion: string | null
+  releaseDate: string | null
+  releaseNotes: string | null
+  releaseUrl: string
+  progress: UpdateProgress | null
+  error: string | null
+  autoCheck: boolean
+  mirror: string
+  canCheck: boolean
+  canAutoInstall: boolean
+  installHint: string | null
+}
+
 export interface AppConfig {
   manualPaths: Partial<Record<ToolId, string>>
   theme: 'system' | 'light' | 'dark'
+  update: UpdateConfig
 }
 
 export interface Bootstrap {
@@ -80,6 +117,7 @@ export interface Bootstrap {
   config: AppConfig
   pluginSource: { version: string | null; error?: string }
   theme: 'system' | 'light' | 'dark'
+  updateStatus: UpdateStatus
 }
 
 export interface PreviewChange {
@@ -116,14 +154,6 @@ export interface HistoryEntry {
   summary: string
 }
 
-export interface UpdateCheck {
-  currentVersion: string
-  latestVersion: string | null
-  hasUpdate: boolean
-  releaseUrl: string
-  publishedAt: string | null
-}
-
 export interface LocaliserApi {
   bootstrap: () => Promise<Bootstrap>
   detect: (runId: string) => Promise<{ cancelled: boolean; results: ToolResult[] }>
@@ -145,7 +175,12 @@ export interface LocaliserApi {
   listHistory: () => Promise<HistoryEntry[]>
   openPath: (kind: 'data' | 'backups' | 'plugins' | 'settings') => Promise<{ ok: boolean }>
   setTheme: (theme: 'system' | 'light' | 'dark') => Promise<{ ok: boolean }>
-  checkUpdates: () => Promise<UpdateCheck>
+  getUpdateStatus: () => Promise<UpdateStatus>
+  checkUpdates: () => Promise<UpdateStatus>
+  downloadUpdate: () => Promise<UpdateStatus>
+  installUpdate: () => Promise<{ ok: boolean }>
+  setUpdateConfig: (payload: Partial<UpdateConfig>) => Promise<{ config: UpdateConfig; status: UpdateStatus }>
+  onUpdateEvent: (callback: (status: UpdateStatus) => void) => () => void
   openExternal: (url: string) => Promise<{ ok: boolean }>
 }
 

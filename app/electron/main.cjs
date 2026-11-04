@@ -9,13 +9,15 @@ const { createPaths } = require('./core/paths.cjs')
 const { createConfigStore, createStateStore, createHistoryStore } = require('./core/store.cjs')
 const { createClaudeCodeLocalization } = require('./core/localization/claude-code.cjs')
 const { detectAll, detectTool } = require('./core/scan.cjs')
-const { checkForUpdates, DEFAULT_REPO } = require('./core/updates.cjs')
+const { DEFAULT_REPO } = require('./core/updates.cjs')
+const { createUpdateService } = require('./core/update-service.cjs')
 
 let mainWindow = null
 let paths = null
 let configStore = null
 let historyStore = null
 let localizationService = null
+let updateService = null
 const runs = new Map()
 
 function sourcePluginDir() {
@@ -37,6 +39,14 @@ function initServices() {
     sourcePluginDir: sourcePluginDir(),
     stateStore,
     historyStore,
+  })
+  updateService = createUpdateService({
+    currentVersion: app.getVersion(),
+    getConfig: async () => (await configStore.get()).update,
+    saveConfig: async (next) => (await configStore.setUpdate(next)).update,
+    onStatus: (status) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update:event', status)
+    },
   })
 }
 
@@ -81,7 +91,10 @@ function createWindow() {
     },
   })
 
-  mainWindow.once('ready-to-show', () => mainWindow.show())
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show()
+    void updateService.startupCheck()
+  })
   if (process.env.LOCALISER_SCREENSHOT) {
     mainWindow.webContents.once('did-finish-load', () => {
       setTimeout(async () => {
@@ -149,6 +162,7 @@ function registerIpc() {
       config,
       pluginSource,
       theme: config.theme,
+      updateStatus: updateService.getStatus(),
     }
   })
 
@@ -259,9 +273,30 @@ function registerIpc() {
     return { ok: true }
   })
 
-  ipcMain.handle('app:check-updates', async (event) => {
+  ipcMain.handle('update:status', (event) => {
     if (!ensureWindowSender(event)) throw new Error('非法调用来源')
-    return checkForUpdates(app.getVersion())
+    return updateService.getStatus()
+  })
+
+  ipcMain.handle('update:check', async (event) => {
+    if (!ensureWindowSender(event)) throw new Error('非法调用来源')
+    return updateService.check()
+  })
+
+  ipcMain.handle('update:download', async (event) => {
+    if (!ensureWindowSender(event)) throw new Error('非法调用来源')
+    return updateService.download()
+  })
+
+  ipcMain.handle('update:install', (event) => {
+    if (!ensureWindowSender(event)) throw new Error('非法调用来源')
+    updateService.install()
+    return { ok: true }
+  })
+
+  ipcMain.handle('update:set-config', async (event, next) => {
+    if (!ensureWindowSender(event)) throw new Error('非法调用来源')
+    return updateService.setConfig(next || {})
   })
 
   ipcMain.handle('app:open-external', async (event, url) => {
@@ -272,9 +307,10 @@ function registerIpc() {
   })
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   app.setAppUserModelId('com.localiser.chinese')
   initServices()
+  await updateService.init()
   registerIpc()
   createWindow()
   app.on('activate', () => {

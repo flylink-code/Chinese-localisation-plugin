@@ -1,6 +1,19 @@
 'use strict'
 
 const { readJsonSafe, writeJsonAtomic } = require('./util.cjs')
+const { normalizeMirrorUrl } = require('./updates.cjs')
+
+function normalizeUpdateConfig(value) {
+  const autoCheck = typeof value?.autoCheck === 'boolean' ? value.autoCheck : true
+  let mirror = ''
+  try {
+    mirror = normalizeMirrorUrl(value?.mirror)
+  } catch {
+    // 磁盘上的非法镜像地址按未配置处理，并在设置页重新填写
+    mirror = ''
+  }
+  return { autoCheck, mirror }
+}
 
 function createStore(file) {
   async function read(fallback) {
@@ -24,6 +37,7 @@ function createConfigStore(file) {
       return {
         manualPaths: value.manualPaths && typeof value.manualPaths === 'object' ? value.manualPaths : {},
         theme: ['system', 'light', 'dark'].includes(value.theme) ? value.theme : 'system',
+        update: normalizeUpdateConfig(value.update),
       }
     },
     async setManualPath(toolId, target) {
@@ -36,6 +50,15 @@ function createConfigStore(file) {
     async setTheme(theme) {
       const current = await this.get()
       current.theme = theme
+      await store.write(current)
+      return current
+    },
+    async setUpdate(next) {
+      const current = await this.get()
+      const autoCheck = next?.autoCheck === undefined ? current.update.autoCheck : next.autoCheck
+      if (typeof autoCheck !== 'boolean') throw new Error('自动检查更新选项格式无法识别')
+      const mirror = next?.mirror === undefined ? current.update.mirror : normalizeMirrorUrl(next.mirror)
+      current.update = { autoCheck, mirror }
       await store.write(current)
       return current
     },

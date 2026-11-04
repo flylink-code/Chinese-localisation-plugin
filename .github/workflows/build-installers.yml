@@ -17,14 +17,18 @@ jobs:
         include:
           - os: windows-latest
             script: dist:win
+            manifest: latest.yml
             artifacts: |
               app/release/*.exe
               app/release/*.exe.blockmap
+              app/release/latest.yml
           - os: ubuntu-latest
             script: dist:linux
+            manifest: latest-linux.yml
             artifacts: |
               app/release/*.AppImage
               app/release/*.deb
+              app/release/latest-linux.yml
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +43,9 @@ jobs:
         working-directory: app
       - run: npm run ${{ matrix.script }}
         working-directory: app
+      - name: Verify update manifest
+        run: test -f "app/release/${{ matrix.manifest }}"
+        shell: bash
       - uses: actions/upload-artifact@v4
         with:
           name: installers-${{ matrix.os }}

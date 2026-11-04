@@ -14,7 +14,7 @@ import type {
   ToolId,
   ToolInstance,
   ToolResult,
-  UpdateCheck,
+  UpdateStatus,
 } from './types'
 
 type Page = 'apps' | 'history' | 'settings'
@@ -95,9 +95,9 @@ export default function App() {
   const [toast, setToast] = useState<{ message: string; tone: 'success' | 'danger' | 'info' } | null>(null)
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('system')
-  const [updateState, setUpdateState] = useState<
-    { phase: 'idle' | 'checking' } | { phase: 'done'; data: UpdateCheck } | { phase: 'error'; error: string }
-  >({ phase: 'idle' })
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
+  const [mirrorDraft, setMirrorDraft] = useState('')
+  const [updateBusy, setUpdateBusy] = useState(false)
   const [busy, setBusy] = useState(false)
   const runIdRef = useRef<string | null>(null)
   const resultsRef = useRef<Record<string, ToolResult>>({})
@@ -173,6 +173,8 @@ export default function App() {
         if (cancelled) return
         setBootstrap(info)
         setTheme(info.theme)
+        setMirrorDraft(info.config.update.mirror)
+        setUpdateStatus(info.updateStatus)
         const initial: Record<string, ToolResult> = {}
         for (const tool of info.tools) initial[tool.id] = idleResult(tool.id)
         setResults(initial)
@@ -209,6 +211,10 @@ export default function App() {
   useEffect(() => {
     if (page === 'history') void refreshHistory()
   }, [page, refreshHistory])
+
+  useEffect(() => {
+    return api.onUpdateEvent((status) => setUpdateStatus(status))
+  }, [])
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
@@ -401,11 +407,58 @@ export default function App() {
   }
 
   const checkUpdates = async () => {
-    setUpdateState({ phase: 'checking' })
+    setUpdateBusy(true)
     try {
-      setUpdateState({ phase: 'done', data: await api.checkUpdates() })
+      setUpdateStatus(await api.checkUpdates())
     } catch (error) {
-      setUpdateState({ phase: 'error', error: (error as Error).message })
+      showToast(`检查更新失败：${(error as Error).message}`, 'danger')
+    } finally {
+      setUpdateBusy(false)
+    }
+  }
+
+  const downloadUpdate = async () => {
+    setUpdateBusy(true)
+    try {
+      setUpdateStatus(await api.downloadUpdate())
+    } catch (error) {
+      showToast(`下载更新失败：${(error as Error).message}`, 'danger')
+    } finally {
+      setUpdateBusy(false)
+    }
+  }
+
+  const installUpdate = async () => {
+    try {
+      await api.installUpdate()
+    } catch (error) {
+      showToast(`安装更新失败：${(error as Error).message}`, 'danger')
+    }
+  }
+
+  const setAutoCheck = async (autoCheck: boolean) => {
+    try {
+      const output = await api.setUpdateConfig({ autoCheck })
+      setUpdateStatus(output.status)
+      setBootstrap((current) =>
+        current ? { ...current, config: { ...current.config, update: output.config } } : current,
+      )
+    } catch (error) {
+      showToast(`保存自动检查设置失败：${(error as Error).message}`, 'danger')
+    }
+  }
+
+  const saveMirror = async () => {
+    try {
+      const output = await api.setUpdateConfig({ mirror: mirrorDraft })
+      setMirrorDraft(output.config.mirror)
+      setUpdateStatus(output.status)
+      setBootstrap((current) =>
+        current ? { ...current, config: { ...current.config, update: output.config } } : current,
+      )
+      showToast(output.config.mirror ? '镜像地址已保存' : '已恢复使用 GitHub 官方源', 'success')
+    } catch (error) {
+      showToast(`保存镜像地址失败：${(error as Error).message}`, 'danger')
     }
   }
 
@@ -433,7 +486,7 @@ export default function App() {
   }
 
   const pageTitle = page === 'apps' ? '软件管理' : page === 'history' ? '操作记录' : '设置'
-  const releaseDate = updateState.phase === 'done' ? formatReleaseDate(updateState.data.publishedAt) : null
+  const releaseDate = formatReleaseDate(updateStatus?.releaseDate ?? null)
   const pageSubtitle =
     page === 'apps'
       ? '检测本机已安装的 AI 工具，查看汉化状态并管理汉化。'
@@ -466,6 +519,9 @@ export default function App() {
           <button className={page === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => setPage('settings')}>
             <Icon name="settings" size={18} />
             设置
+            {(updateStatus?.phase === 'available' || updateStatus?.phase === 'downloaded') && (
+              <span className="nav-dot" aria-label="有可用更新" />
+            )}
           </button>
         </nav>
 
@@ -709,7 +765,7 @@ export default function App() {
                 <Icon name="download" size={19} />
                 <div>
                   <h2>版本与更新</h2>
-                  <p>通过 GitHub Releases 分发；仅在点击时检查，不自动下载或安装。</p>
+                  <p>启动时自动检查版本；下载和安装都需要你确认，不静默改动机器。</p>
                 </div>
               </div>
               <dl className="detail-grid">
@@ -719,49 +775,123 @@ export default function App() {
                 </div>
                 <div>
                   <dt>更新渠道</dt>
-                  <dd>GitHub Releases</dd>
+                  <dd>{updateStatus?.mirror ? '自定义镜像' : 'GitHub Releases'}</dd>
                 </div>
               </dl>
+
+              <label className="switch-row">
+                <span>
+                  <strong>启动时自动检查更新</strong>
+                  <small>只读取版本信息，不会自动下载或安装。</small>
+                </span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={updateStatus?.autoCheck ?? bootstrap.config.update.autoCheck}
+                  onChange={(event) => void setAutoCheck(event.target.checked)}
+                />
+              </label>
+
+              <div className="mirror-row">
+                <label htmlFor="mirror-url">GitHub 镜像地址</label>
+                <div className="mirror-input">
+                  <input
+                    id="mirror-url"
+                    value={mirrorDraft}
+                    onChange={(event) => setMirrorDraft(event.target.value)}
+                    placeholder="https://镜像地址/…/releases/latest/download"
+                    spellCheck={false}
+                  />
+                  <button className="btn btn-ghost" onClick={() => void saveMirror()} disabled={updateBusy}>
+                    保存
+                  </button>
+                </div>
+                <p className="settings-hint">
+                  留空使用 GitHub 官方源。镜像需提供 <code>latest.yml</code>（Linux 为{' '}
+                  <code>latest-linux.yml</code>）和安装包；镜像可以替换更新内容，请只填写你信任的地址。
+                </p>
+              </div>
+
               <div className="update-actions">
                 <button
                   className="btn btn-primary"
                   onClick={() => void checkUpdates()}
-                  disabled={updateState.phase === 'checking'}
+                  disabled={
+                    updateBusy || updateStatus?.phase === 'checking' || updateStatus?.phase === 'downloading'
+                  }
                 >
-                  {updateState.phase === 'checking' ? '正在检查…' : '检查更新'}
+                  {updateStatus?.phase === 'checking' ? '正在检查…' : '检查更新'}
                 </button>
-                <button className="btn btn-ghost" onClick={() => void openExternal(bootstrap.releasesUrl)}>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => void openExternal(updateStatus?.releaseUrl || bootstrap.releasesUrl)}
+                >
                   打开发布页
                 </button>
+                {updateStatus?.phase === 'available' && updateStatus.canAutoInstall && (
+                  <button className="btn btn-primary" onClick={() => void downloadUpdate()} disabled={updateBusy}>
+                    <Icon name="download" size={16} />
+                    下载更新
+                  </button>
+                )}
+                {updateStatus?.phase === 'downloaded' && (
+                  <button className="btn btn-primary" onClick={() => void installUpdate()}>
+                    <Icon name="refresh" size={16} />
+                    安装并重启
+                  </button>
+                )}
               </div>
-              {updateState.phase === 'error' && (
-                <div className="notice notice-danger update-result">
-                  <Icon name="alert" size={16} />
-                  <p>检查更新失败：{updateState.error}</p>
+
+              {updateStatus?.phase === 'downloading' && (
+                <div className="update-progress">
+                  <div className="progress-track">
+                    <span style={{ width: `${updateStatus.progress?.percent ?? 0}%` }} />
+                  </div>
+                  <span>{Math.round(updateStatus.progress?.percent ?? 0)}%</span>
                 </div>
               )}
-              {updateState.phase === 'done' &&
-                (updateState.data.hasUpdate ? (
-                  <div className="notice notice-warning update-result">
-                    <Icon name="download" size={16} />
-                    <p>
-                      发现新版本 v{updateState.data.latestVersion}（当前 v{updateState.data.currentVersion}
-                      {releaseDate && `，发布于 ${releaseDate}`}）。请从发布页下载安装包手动更新。
-                    </p>
-                  </div>
-                ) : updateState.data.latestVersion === null ? (
-                  <div className="notice update-result">
-                    <Icon name="info" size={16} />
-                    <p>仓库尚未发布 Release，暂无可更新版本。</p>
-                  </div>
-                ) : (
-                  <div className="notice update-result">
-                    <Icon name="check" size={16} />
-                    <p>已是最新版本（v{updateState.data.latestVersion}）。</p>
-                  </div>
-                ))}
+
+              {updateStatus?.phase === 'available' && (
+                <div className="notice notice-warning update-result">
+                  <Icon name="download" size={16} />
+                  <p>
+                    发现新版本 v{updateStatus.latestVersion}（当前 v{updateStatus.currentVersion}
+                    {releaseDate && `，发布于 ${releaseDate}`}）。
+                    {updateStatus.canAutoInstall
+                      ? '点击「下载更新」，下载完成后由你确认安装。'
+                      : updateStatus.installHint}
+                  </p>
+                </div>
+              )}
+              {updateStatus?.phase === 'downloaded' && (
+                <div className="notice notice-warning update-result">
+                  <Icon name="check" size={16} />
+                  <p>更新已下载完成。点击「安装并重启」后应用会退出并完成安装。</p>
+                </div>
+              )}
+              {updateStatus?.phase === 'up-to-date' && (
+                <div className="notice update-result">
+                  <Icon name="check" size={16} />
+                  <p>已是最新版本（v{updateStatus.latestVersion ?? updateStatus.currentVersion}）。</p>
+                </div>
+              )}
+              {updateStatus?.phase === 'error' && (
+                <div className="notice notice-danger update-result">
+                  <Icon name="alert" size={16} />
+                  <p>更新失败：{updateStatus.error}</p>
+                </div>
+              )}
+              {updateStatus?.phase === 'idle' && !updateStatus.canCheck && (
+                <div className="notice update-result">
+                  <Icon name="info" size={16} />
+                  <p>{updateStatus.installHint ?? '开发模式不执行更新检查，请在已安装的版本中检查更新。'}</p>
+                </div>
+              )}
+              {updateStatus?.canCheck && !updateStatus.canAutoInstall && updateStatus.installHint && (
+                <p className="settings-hint">{updateStatus.installHint}</p>
+              )}
               <p className="settings-hint">
-                检查更新只读取 GitHub 最新 Release 的版本号，不上传本机安装与汉化信息。
+                更新检查与下载不读取也不上传本机安装与汉化信息；安装包未签名，仅校验更新元数据中的文件哈希。
               </p>
             </article>
 

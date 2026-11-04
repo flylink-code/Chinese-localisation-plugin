@@ -2,86 +2,53 @@
 
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { checkForUpdates } = require('../core/updates.cjs')
+const fsp = require('node:fs').promises
+const os = require('node:os')
+const path = require('node:path')
+const { normalizeMirrorUrl, resolveFeed, isAutoInstallSupported, installHint } = require('../core/updates.cjs')
+const { createConfigStore } = require('../core/store.cjs')
 
-const REPO = 'owner/repo'
-const CURRENT = '0.1.0'
+test('镜像地址只接受 https 基础地址并去掉末尾斜杠', () => {
+  assert.equal(normalizeMirrorUrl(''), '')
+  assert.equal(normalizeMirrorUrl('   '), '')
+  assert.equal(
+    normalizeMirrorUrl('https://ghproxy.net/https://github.com/o/r/releases/latest/download/'),
+    'https://ghproxy.net/https://github.com/o/r/releases/latest/download',
+  )
+  assert.throws(() => normalizeMirrorUrl('http://mirror.example/'), /必须使用 https/)
+  assert.throws(() => normalizeMirrorUrl('https://user:pass@mirror.example/'), /账号信息/)
+  assert.throws(() => normalizeMirrorUrl('https://mirror.example/?token=x'), /查询参数/)
+  assert.throws(() => normalizeMirrorUrl('not a url'), /有效的 URL/)
+})
 
-function releaseResponse(release, status = 200) {
-  return async () => ({
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => release,
+test('未配置镜像时使用 GitHub 官方源', () => {
+  assert.deepEqual(resolveFeed('', 'owner/repo'), { provider: 'github', owner: 'owner', repo: 'repo' })
+  assert.deepEqual(resolveFeed('https://mirror.example/gh', 'owner/repo'), {
+    provider: 'generic',
+    url: 'https://mirror.example/gh',
   })
-}
-
-test('发现更高版本时返回更新信息和发布页', async () => {
-  const result = await checkForUpdates(CURRENT, {
-    repo: REPO,
-    fetchImpl: releaseResponse({
-      tag_name: 'v0.2.0',
-      html_url: 'https://github.com/owner/repo/releases/tag/v0.2.0',
-      published_at: '2026-11-04T08:00:00Z',
-    }),
-  })
-  assert.equal(result.latestVersion, '0.2.0')
-  assert.equal(result.hasUpdate, true)
-  assert.equal(result.releaseUrl, 'https://github.com/owner/repo/releases/tag/v0.2.0')
-  assert.equal(result.publishedAt, '2026-11-04T08:00:00Z')
 })
 
-test('版本相同或更低时不提示更新', async () => {
-  for (const tag of ['v0.1.0', 'v0.0.9']) {
-    const result = await checkForUpdates(CURRENT, { repo: REPO, fetchImpl: releaseResponse({ tag_name: tag }) })
-    assert.equal(result.hasUpdate, false, tag)
-  }
+test('自动安装支持 Windows 与 AppImage，deb 需手动更新', () => {
+  assert.equal(isAutoInstallSupported('win32', {}), true)
+  assert.equal(isAutoInstallSupported('linux', { APPIMAGE: '/tmp/app.AppImage' }), true)
+  assert.equal(isAutoInstallSupported('linux', {}), false)
+  assert.equal(isAutoInstallSupported('darwin', {}), false)
+  assert.match(installHint('linux', {}, true), /手动安装/)
+  assert.match(installHint('win32', {}, false), /开发模式/)
+  assert.equal(installHint('win32', {}, true), null)
 })
 
-test('仓库没有 Release 时返回不存在的版本而不是已是最新', async () => {
-  const result = await checkForUpdates(CURRENT, { repo: REPO, fetchImpl: releaseResponse({}, 404) })
-  assert.equal(result.latestVersion, null)
-  assert.equal(result.hasUpdate, false)
-  assert.equal(result.releaseUrl, 'https://github.com/owner/repo/releases')
-})
+test('更新配置持久化并拒绝非法镜像', async (t) => {
+  const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'localiser-update-'))
+  t.after(() => fsp.rm(tmp, { recursive: true, force: true }))
+  const store = createConfigStore(path.join(tmp, 'config.json'))
 
-test('接口错误、标签缺失或响应不可解析时明确报错', async () => {
-  await assert.rejects(
-    checkForUpdates(CURRENT, { repo: REPO, fetchImpl: releaseResponse({}, 403) }),
-    /HTTP 403/,
-  )
-  await assert.rejects(
-    checkForUpdates(CURRENT, { repo: REPO, fetchImpl: releaseResponse({ tag_name: 'nightly' }) }),
-    /无法解析最新版本号/,
-  )
-  await assert.rejects(
-    checkForUpdates(CURRENT, {
-      repo: REPO,
-      fetchImpl: async () => ({
-        ok: true,
-        status: 200,
-        json: async () => {
-          throw new Error('bad json')
-        },
-      }),
-    }),
-    /无法解析的响应/,
-  )
-})
+  assert.deepEqual((await store.get()).update, { autoCheck: true, mirror: '' })
 
-test('网络异常与外部发布链接被正确限制', async () => {
-  await assert.rejects(
-    checkForUpdates(CURRENT, {
-      repo: REPO,
-      fetchImpl: async () => {
-        throw new Error('getaddrinfo ENOTFOUND')
-      },
-    }),
-    /无法连接 GitHub/,
-  )
+  const saved = await store.setUpdate({ autoCheck: false, mirror: 'https://mirror.example/gh/' })
+  assert.deepEqual(saved.update, { autoCheck: false, mirror: 'https://mirror.example/gh' })
 
-  const result = await checkForUpdates(CURRENT, {
-    repo: REPO,
-    fetchImpl: releaseResponse({ tag_name: 'v0.2.0', html_url: 'https://evil.example/download' }),
-  })
-  assert.equal(result.releaseUrl, 'https://github.com/owner/repo/releases')
+  await assert.rejects(store.setUpdate({ mirror: 'http://mirror.example' }), /https/)
+  assert.deepEqual((await store.get()).update, { autoCheck: false, mirror: 'https://mirror.example/gh' })
 })
