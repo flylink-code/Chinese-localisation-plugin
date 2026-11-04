@@ -13,6 +13,7 @@ const {
   parseVersion,
   compareVersions,
   makeId,
+  normalizePath,
   errorMessage,
 } = require('../util.cjs')
 
@@ -21,13 +22,21 @@ function candidateCliPaths() {
   const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming')
   const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local')
   const names = process.platform === 'win32' ? ['claude.cmd', 'claude.exe', 'claude'] : ['claude']
-  const dirs = [
-    path.join(appData, 'npm'),
-    path.join(localAppData, 'Microsoft', 'WinGet', 'Links'),
-    path.join(home, '.local', 'bin'),
-    path.join(localAppData, 'Programs', 'claude'),
-    path.join(localAppData, 'Programs', 'Claude Code'),
-  ]
+  const dirs =
+    process.platform === 'win32'
+      ? [
+          path.join(appData, 'npm'),
+          path.join(localAppData, 'Microsoft', 'WinGet', 'Links'),
+          path.join(localAppData, 'Programs', 'claude'),
+          path.join(localAppData, 'Programs', 'Claude Code'),
+        ]
+      : [
+          path.join(home, '.local', 'bin'),
+          path.join(home, '.npm-global', 'bin'),
+          '/usr/local/bin',
+          '/usr/bin',
+          '/snap/bin',
+        ]
   return dirs.flatMap((dir) => names.map((name) => path.join(dir, name)))
 }
 
@@ -44,7 +53,7 @@ async function findCliExecutables(manualPath) {
     } catch {
       real = file
     }
-    const key = real.toLowerCase()
+    const key = normalizePath(real)
     if (seen.has(key)) return
     seen.add(key)
     found.push({ executable: real, requested: file })
@@ -73,7 +82,7 @@ async function findCliExecutables(manualPath) {
   // 同一目录同时存在 claude.cmd 与 claude 时优先使用 Windows 可执行入口
   const byDir = new Map()
   for (const item of found) {
-    const dir = path.dirname(item.executable).toLowerCase()
+    const dir = normalizePath(path.dirname(item.executable))
     const current = byDir.get(dir)
     if (!current) byDir.set(dir, item)
     else if (process.platform === 'win32' && item.executable.toLowerCase().endsWith('.cmd')) byDir.set(dir, item)
@@ -88,10 +97,15 @@ async function readCliVersion(executable) {
     const parsed = parseVersion(result.stdout)
     if (parsed) return { version: parsed.text, source: 'claude --version' }
   }
+  const home = os.homedir()
   const packageCandidates = [
     path.join(process.env.APPDATA || '', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'package.json'),
     path.join(path.dirname(executable), '..', 'node_modules', '@anthropic-ai', 'claude-code', 'package.json'),
+    path.join(path.dirname(executable), '..', 'lib', 'node_modules', '@anthropic-ai', 'claude-code', 'package.json'),
     path.join(path.dirname(executable), 'node_modules', '@anthropic-ai', 'claude-code', 'package.json'),
+    '/usr/local/lib/node_modules/@anthropic-ai/claude-code/package.json',
+    '/usr/lib/node_modules/@anthropic-ai/claude-code/package.json',
+    path.join(home, '.npm-global', 'lib', 'node_modules', '@anthropic-ai', 'claude-code', 'package.json'),
   ]
   for (const file of packageCandidates) {
     const json = await readJsonSafe(file)
@@ -103,7 +117,7 @@ async function readCliVersion(executable) {
 
 function cliChannel(executable) {
   const lower = executable.toLowerCase()
-  if (lower.includes('\\appdata\\roaming\\npm\\')) return 'npm 全局安装'
+  if (lower.includes('\\appdata\\roaming\\npm\\') || lower.includes('/lib/node_modules/')) return 'npm 全局安装'
   if (lower.includes('\\.local\\bin\\') || lower.includes('/.local/bin/')) return '官方原生安装'
   if (lower.includes('winget')) return 'WinGet'
   return '命令行入口'
@@ -152,7 +166,7 @@ async function scanPluginDirs(dirs, ownTarget, maxDepth = 4) {
     visited += 1
     const manifestPath = path.join(root, '.claude-plugin', 'plugin.json')
     if (await exists(manifestPath)) {
-      const key = path.resolve(root).toLowerCase()
+      const key = normalizePath(root)
       if (!seen.has(key)) {
         seen.add(key)
         const manifest = await readJsonSafe(manifestPath)
@@ -163,7 +177,7 @@ async function scanPluginDirs(dirs, ownTarget, maxDepth = 4) {
             evidence.push({
               path: root,
               name: name || '未知插件',
-              managed: path.resolve(root).toLowerCase() === path.resolve(ownTarget).toLowerCase(),
+              managed: normalizePath(root) === normalizePath(ownTarget),
             })
           }
         }

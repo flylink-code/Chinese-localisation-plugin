@@ -9,19 +9,22 @@ A desktop app that detects installed instances of Claude Code, Claude Desktop, a
 | Capability | Status | Notes |
 | --- | --- | --- |
 | Modern desktop UI | Done | Sidebar, search, filters, tool cards, details drawer, light/dark/system themes |
-| Claude Code detection | Done | CLI via `where`, npm global, native install, manual path; VS Code / Cursor / Windsurf extensions |
-| Claude Desktop detection | Done | `%LOCALAPPDATA%\AnthropicClaude\app-*` and MSIX / Microsoft Store installs |
-| Antigravity detection | Done | Registry entries, default install path, manual path; version read from `app.asar` |
+| Claude Code detection | Done | CLI via `where`/`which`, npm global, native install, manual path; VS Code / Cursor / Windsurf extensions; Windows and Linux |
+| Claude Desktop detection | Done | Windows: `%LOCALAPPDATA%\AnthropicClaude\app-*` and MSIX; Linux: deb install at `/usr/lib/claude-desktop` |
+| Antigravity detection | Done | Windows registry and default paths; Linux `~/.local/share`, `/opt`, `/usr/share`, Snap, Flatpak; manual path |
 | Localization status | Done | Distinguishes not localized, managed by this app, external localization, config error, and unconfirmed Chinese resources |
-| Apply localization (Claude Code) | Done | Copies the bundled `cc-zh` plugin, merges user-level `settings.json`, backs up first |
+| Apply localization (Claude Code) | Done | Copies the bundled `cc-zh` plugin, merges user-level `settings.json`, backs up first; Windows and Linux |
 | Uninstall localization (Claude Code) | Done | Removes only entries written by this app; keeps other plugins and later user edits |
-| Desktop / Antigravity writes | Not implemented | Detect-only; reference installers are never executed |
 | GitHub update check | Done | Manual check of the latest Release from Settings; opens the release page, never downloads or installs |
-| Installer / auto-update | Not implemented | See task plan P5 |
+| Windows / Ubuntu installers | Done | NSIS `.exe`, AppImage, `.deb`; unsigned, built locally or by GitHub Actions |
+| Desktop / Antigravity writes | Not implemented | Detect-only; reference installers are never executed |
+| Auto-update | Not implemented | Update check only reports the version and opens the release page |
 
 ## Quick start
 
-Requirements: Windows 10/11, Node.js 20+.
+Requirements: Windows 10/11 or Ubuntu 22.04+, Node.js 20+.
+
+Installers are published on GitHub Releases: a Windows NSIS installer plus Ubuntu AppImage and deb. They are unsigned; AppImage requires `libfuse2` and its desktop entry uses `--no-sandbox` (Electron AppImage limitation), so prefer the deb when the Chromium sandbox matters.
 
 ```bash
 cd app
@@ -45,7 +48,7 @@ If your environment sets `ELECTRON_RUN_AS_NODE=1`, launch with `env -u ELECTRON_
 - `app/package.json` `version` is the single source of truth; the UI and update check read it.
 - To release: bump the version and [CHANGELOG.md](CHANGELOG.md), commit, tag `vX.Y.Z`, and publish a GitHub Release with the same tag.
 - The Settings update check only reads the latest Release version and opens its page; it never downloads or replaces files.
-- Current version is `0.1.0`; there is no installer yet, so the app runs from a source build.
+- Current version is `0.1.0`, with Windows and Ubuntu installers. Pushing a `vX.Y.Z` tag builds and uploads them via GitHub Actions.
 
 ## Scope and safety
 

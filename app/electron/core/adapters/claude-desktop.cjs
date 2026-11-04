@@ -10,6 +10,8 @@ const {
   listDir,
   fileContainsAny,
   runPowerShell,
+  runCommand,
+  normalizePath,
   parseVersion,
   makeId,
 } = require('../util.cjs')
@@ -127,13 +129,24 @@ async function findManual(appPath) {
   }))
 }
 
+async function readLinuxVersion(appDir) {
+  try {
+    const parsed = parseVersion(await fsp.readFile(path.join(appDir, 'version'), 'utf8'))
+    if (parsed) return parsed.text
+  } catch {
+    // 无版本文件时继续查询 dpkg
+  }
+  const result = await runCommand('dpkg-query', ['-W', '-f=${Version}', 'claude-desktop'], { timeout: 5000 })
+  return result.ok ? parseVersion(result.stdout)?.text || null : null
+}
+
 async function detectClaudeDesktop(ctx) {
   const { manualPath } = ctx
   const candidates = []
   const seen = new Set()
 
   async function add(candidate) {
-    const key = path.resolve(candidate.root).toLowerCase()
+    const key = normalizePath(candidate.root)
     if (seen.has(key)) return
     seen.add(key)
     candidates.push(candidate)
@@ -161,6 +174,9 @@ async function detectClaudeDesktop(ctx) {
       channel: item.channel,
     })
   }
+  if (process.platform === 'linux') {
+    await add({ root: '/usr/lib/claude-desktop', version: null, channel: 'deb 包' })
+  }
 
   const instances = []
   const notes = []
@@ -176,6 +192,10 @@ async function detectClaudeDesktop(ctx) {
         versionSource = 'package.json'
         break
       }
+    }
+    if (!version && candidate.channel.includes('deb')) {
+      version = await readLinuxVersion(candidate.root)
+      if (version) versionSource = 'version 文件或 dpkg'
     }
     const instance = {
       id: makeId('claude-desktop', candidate.root),
@@ -195,7 +215,10 @@ async function detectClaudeDesktop(ctx) {
         {
           kind: 'apply',
           enabled: false,
-          reason: '该发行版的汉化引擎尚未接入；当前提供真实检测与状态查看',
+          reason:
+            process.platform === 'linux'
+              ? 'Linux 汉化需用 sudo 修改系统安装目录并重打包资源，本软件不自动提权；当前仅检测'
+              : '该发行版的汉化引擎尚未接入；当前提供真实检测与状态查看',
         },
         {
           kind: 'uninstall',

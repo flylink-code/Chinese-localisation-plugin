@@ -11,6 +11,7 @@ const {
   fileContainsAny,
   readAsarEntry,
   runPowerShell,
+  normalizePath,
   makeId,
 } = require('../util.cjs')
 
@@ -18,6 +19,32 @@ const ANTIGRAVITY_MARKERS = ['__ANTIGRAVITY_CHINESE_LOCALIZATION_START__']
 
 function localRoots() {
   const home = os.homedir()
+  if (process.platform !== 'win32') {
+    return [
+      path.join(home, '.local', 'share', 'antigravity'),
+      path.join(home, '.local', 'share', 'Antigravity'),
+      path.join(
+        home,
+        '.local',
+        'share',
+        'flatpak',
+        'app',
+        'com.antigravity',
+        'current',
+        'active',
+        'files',
+        'share',
+        'antigravity',
+      ),
+      '/opt/antigravity',
+      '/opt/Antigravity',
+      '/usr/local/share/antigravity',
+      '/usr/local/share/Antigravity',
+      '/usr/share/antigravity',
+      '/usr/share/Antigravity',
+      '/snap/antigravity/current/usr/share/antigravity',
+    ]
+  }
   const local = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local')
   const programFiles = process.env.ProgramFiles || 'C:\\Program Files'
   return [
@@ -161,7 +188,7 @@ async function detectAntigravity(ctx) {
     if (!root) return
     const resolved = await resolveAppDir(root)
     if (!resolved) return
-    const key = path.resolve(resolved).toLowerCase()
+    const key = normalizePath(resolved)
     if (seen.has(key)) return
     seen.add(key)
     roots.push({ appDir: resolved, channel })

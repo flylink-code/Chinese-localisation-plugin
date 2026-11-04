@@ -1,6 +1,6 @@
 # 支持矩阵与验证记录
 
-更新日期：2026年11月04日。平台：Windows 11。适用范围：本仓库当前 `app` 实现，不代表参考项目的完整能力。
+更新日期：2026年11月04日。平台：Windows 11、WSL Ubuntu 22.04。适用范围：本仓库当前 `app` 实现，不代表参考项目的完整能力。
 
 验证级别：
 
@@ -9,12 +9,16 @@
 - **隔离流程验证**：在临时用户目录执行应用/卸载，未使用真实用户配置。
 - **真实客户端验证**：启动目标软件并人工确认界面与恢复效果。
 
-| 工具 | 检测 | 汉化状态 | 应用汉化 | 卸载汉化 | 已验证级别 |
-| --- | --- | --- | --- | --- | --- |
-| Claude Code CLI | 支持 | 支持 | 支持 | 支持 | 实机检测 + 隔离流程验证 |
-| Claude Code IDE 扩展 | 支持 | 仅说明 CLI 插件不影响扩展 | 不支持 | 不支持 | 实机检测 |
-| Claude Desktop | 支持 | 支持 | 不支持 | 不支持 | 实机检测 |
-| Antigravity | 支持 | 支持 | 不支持 | 不支持 | 实机检测 |
+| 工具 | 平台 | 检测 | 汉化状态 | 应用汉化 | 卸载汉化 | 已验证级别 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Claude Code CLI | Windows | 支持 | 支持 | 支持 | 支持 | 实机检测 + 隔离流程验证 |
+| Claude Code CLI | Ubuntu | 支持 | 支持 | 支持 | 支持 | WSL 隔离流程验证 |
+| Claude Code IDE 扩展 | Windows | 支持 | 仅说明 CLI 插件不影响扩展 | 不支持 | 不支持 | 实机检测 |
+| Claude Code IDE 扩展 | Ubuntu | 支持 | 仅说明 CLI 插件不影响扩展 | 不支持 | 不支持 | 源码可见 |
+| Claude Desktop | Windows | 支持 | 支持 | 不支持 | 不支持 | 实机检测 |
+| Claude Desktop | Ubuntu | 支持（deb） | 支持 | 不支持 | 不支持 | 隔离 fixture |
+| Antigravity | Windows | 支持 | 支持 | 不支持 | 不支持 | 实机检测 |
+| Antigravity | Ubuntu | 支持 | 支持 | 不支持 | 不支持 | 隔离 fixture |
 
 ## Claude Code CLI
 
@@ -29,6 +33,23 @@
   - 真实用户 `~/.claude/settings.json` 哈希前后一致。
 - 尚未验证：启动 Claude Code 后中文文案的实际渲染、真实用户环境下的应用、插件对各版本的覆盖一致性、占位符与终端宽度人工检查。
 - 已知限制：权限确认对话框、欢迎屏、错误信息、`claude --help` 等不在插件覆盖范围；插件未命中的文案保持英文。
+
+## Ubuntu 22.04
+
+- Claude Code CLI：
+  - 检测路径增加 `~/.local/bin`、`~/.npm-global/bin`、`/usr/local/bin`、`/usr/bin`、`/snap/bin`，并使用 `which claude`。
+  - 版本读取沿用 `claude --version`，补充 `/usr/local/lib/node_modules`、`/usr/lib/node_modules`、`~/.npm-global/lib/node_modules` 的 `package.json`。
+  - 在 WSL Ubuntu 22.04 的临时 `HOME` 中验证：`~/.local/bin/claude` 被发现，应用汉化后 `settings.json` 保留 `env.OTHER` 与 `language`，卸载后恢复并删除插件目录。
+  - 插件由 Claude Code 官方插件扩展点加载，与 Windows 使用同一份 `cc-zh`；未在真实 Ubuntu 客户端验证中文渲染。
+- Claude Desktop（deb）：
+  - 参考项目仅支持 deb 安装，资源位于 `/usr/lib/claude-desktop/resources`，补丁需要用 `sudo` 修改系统目录并重打包 `app.asar`。
+  - 本实现增加 `/usr/lib/claude-desktop` 只读检测，版本读取 `version` 文件或 `dpkg-query`；按“不自动提权”规则不提供写入。
+  - 隔离 fixture 验证了资源布局与状态判断，未在真实 deb 安装上运行。
+- Antigravity：
+  - 参考项目声明支持 Linux（含 Ubuntu），检测候选包括 `~/.local/share/antigravity`、`/opt`、`/usr/share`、Snap 与 Flatpak。
+  - 本实现接入上述只读路径；隔离 fixture 验证可发现 `~/.local/share/antigravity/resources/app.asar`。
+  - 参考项目通过 ASAR 解包与代码注入实现汉化，本实现未接入该写入路径，因此 Ubuntu 上仍仅检测与状态查看。
+- 安装包：在 WSL Ubuntu 22.04 构建 AppImage 与 deb；尚未在干净 Ubuntu 桌面安装启动，未验证 FUSE、图标与桌面菜单集成。
 
 ## Claude Code IDE 扩展
 

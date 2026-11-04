@@ -5,7 +5,8 @@
 ## 1. 项目事实与文档入口
 
 - 已交付可运行桌面应用，工程位于 [app/](app/)，技术栈为 Electron + React + TypeScript + Vite；开发命令以 [README.md](README.md) 和 [app/package.json](app/package.json) 为准，不另行编造。
-- 当前能力：三工具真实只读检测与汉化状态检查；Claude Code CLI 通过官方插件扩展点支持应用/卸载汉化。Claude Desktop、Antigravity 仅检测与状态查看，尚未开放写入。
+- 当前能力：三工具真实只读检测与汉化状态检查；Claude Code CLI 通过官方插件扩展点支持应用/卸载汉化，Windows 与 Ubuntu 均可用。Claude Desktop、Antigravity 仅检测与状态查看，尚未开放写入。
+- 安装包：Windows NSIS、Ubuntu AppImage/deb，由 electron-builder 构建；`vX.Y.Z` 标签触发 GitHub Actions 构建并上传 Release。安装包未签名，不宣称已通过干净环境安装验收。
 - 验证范围记录在 [doc/support-matrix.md](doc/support-matrix.md)；隔离环境流程验证不等于真实客户端界面验收，未验证项不得写成已支持。
 - 版本号唯一来源为 [app/package.json](app/package.json)，变更需同步 [CHANGELOG.md](CHANGELOG.md)；发布使用 `vX.Y.Z` 标签与同名 GitHub Release。设置页更新检查只读取最新 Release 并打开发布页，不自动下载或静默安装。
 - 产品须有现代化桌面 UI：先完成主页、已安装软件检测与汉化状态检查，再逐工具接入应用汉化及卸载汉化；UI 和只读检测不等待写入引擎完成。

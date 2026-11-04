@@ -19,6 +19,7 @@ let localizationService = null
 const runs = new Map()
 
 function sourcePluginDir() {
+  if (app.isPackaged) return path.join(process.resourcesPath, 'plugins', 'cc-zh')
   const bundled = path.join(__dirname, '..', 'resources', 'plugins', 'cc-zh')
   if (fs.existsSync(bundled)) return bundled
   return path.resolve(__dirname, '..', 'vendor', 'cc-zh')

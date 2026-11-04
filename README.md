@@ -1,35 +1,48 @@
 # 汉化管家 · 多工具中文本地化管理软件
 
-面向 Claude Code、Claude Desktop、Antigravity 等工具的本地化管理桌面应用。主页检测本机已安装实例、展示汉化状态，并按适配能力提供应用汉化与卸载汉化（恢复原文，不卸载目标软件）。
+面向 Claude Code、Claude Desktop、Antigravity 等工具的本地化管理桌面应用，支持 Windows 与 Ubuntu。主页检测本机已安装实例、展示汉化状态，并按适配能力提供应用汉化与卸载汉化（恢复原文，不卸载目标软件）。
 
-> 当前为可运行 MVP：三类软件的真实安装检测、汉化状态检查已接入；Claude Code CLI 通过官方插件扩展点完成应用与卸载汉化闭环；Claude Desktop、Antigravity 目前仅支持检测与状态查看。支持的版本与验证范围见 [支持矩阵](doc/support-matrix.md)。
+> 当前为可运行 MVP：三类软件的真实安装检测、汉化状态检查已接入；Claude Code CLI 通过官方插件扩展点完成应用与卸载汉化闭环；Claude Desktop、Antigravity 目前仅支持检测与状态查看。Windows 与 Ubuntu 安装包已构建。支持的版本与验证范围见 [支持矩阵](doc/support-matrix.md)。
 
 ## 1. 已实现能力
 
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
 | 现代化桌面主页 | 已实现 | 侧栏、搜索、筛选、软件卡片、详情抽屉、浅色/深色/跟随系统主题、键盘焦点 |
-| Claude Code 检测 | 已实现 | CLI（`where`、npm 全局、原生安装、手动路径）与 VS Code / Cursor / Windsurf 扩展 |
-| Claude Desktop 检测 | 已实现 | `%LOCALAPPDATA%\AnthropicClaude\app-*` 与 MSIX / Microsoft Store 安装，读取版本与资源布局 |
-| Antigravity 检测 | 已实现 | 注册表安装登记、默认安装位置、手动路径；从 `app.asar` 读取版本 |
+| Claude Code 检测 | 已实现 | CLI（`where`/`which`、npm 全局、原生安装、手动路径）与 VS Code / Cursor / Windsurf 扩展；Windows / Linux |
+| Claude Desktop 检测 | 已实现 | Windows：`%LOCALAPPDATA%\AnthropicClaude\app-*` 与 MSIX；Linux：`/usr/lib/claude-desktop`（deb） |
+| Antigravity 检测 | 已实现 | Windows 注册表与默认位置；Linux `~/.local/share`、`/opt`、`/usr/share`、Snap、Flatpak；手动路径 |
 | 汉化状态检查 | 已实现 | 区分未汉化、本软件汉化、外部汉化、配置异常、中文资源待确认 |
-| Claude Code 应用汉化 | 已实现 | 复制内置 `cc-zh` 插件到应用数据目录，合并用户级 `settings.json`，写前备份 |
+| Claude Code 应用汉化 | 已实现 | 复制内置 `cc-zh` 插件到应用数据目录，合并用户级 `settings.json`，写前备份；Windows / Linux |
 | Claude Code 卸载汉化 | 已实现 | 只移除本软件写入的插件目录配置，保留其他插件和用户后续修改 |
 | 操作记录 | 已实现 | 记录应用/卸载结果，不保存配置内容或敏感信息 |
 | GitHub 更新检查 | 已实现 | 设置页手动检查最新 Release 并打开发布页；不自动下载或安装 |
+| Windows / Ubuntu 安装包 | 已实现 | NSIS `.exe`、AppImage、`.deb`；未签名，由 GitHub Actions 或本地构建 |
 | Desktop / Antigravity 汉化写入 | 未实现 | 仅检测；不调用参考项目安装脚本，避免签名、权限和升级回滚风险 |
-| 安装包 / 自动更新 | 未实现 | 当前通过源码构建运行，详见任务计划 P5 |
+| 自动更新 | 未实现 | 更新检查只提示版本并打开发布页 |
 
 ### 验证范围
 
 - 已在 Windows 11 实机完成三类软件的真实只读检测（Claude Code CLI 2.1.316、Claude Desktop 4.4212.0、Antigravity 2.27.0）。
 - 已在隔离用户目录完成 Claude Code「应用汉化 → 状态刷新 → 卸载汉化 → 原配置恢复」流程验证，未修改本机真实用户配置。
-- 已实机验证设置页的 GitHub 更新检查：当前仓库尚未发布 Release，界面正确显示「暂无可更新版本」。
-- **尚未验证** Claude Code 启动后的中文界面效果、真实用户默认配置下的应用、Desktop / Antigravity 写入、安装包构建及 macOS / Linux。
+- 已在 WSL Ubuntu 22.04 的隔离 HOME 中验证 Linux 检测路径及 Claude Code 应用/卸载闭环；AppImage 与 deb 在 WSL 中构建成功。
+- 已实机验证设置页的 GitHub 更新检查：仓库当前无 Release 时界面正确显示「暂无可更新版本」。
+- **尚未验证** Claude Code 启动后的中文界面效果、真实用户默认配置下的应用、Desktop / Antigravity 写入、安装包在干净 Windows / Ubuntu 机器上的安装与启动、macOS 支持。
 
 ## 2. 快速开始
 
-环境：Windows 10/11、Node.js 20+（开发使用 Node 24）。
+### 安装包
+
+从 [GitHub Releases](https://github.com/flylink-code/Chinese-localisation-plugin/releases) 下载：
+
+- Windows：`ChineseLocaliser-0.1.0-windows-x64.exe`（NSIS 安装包）。
+- Ubuntu：`ChineseLocaliser-0.1.0-linux-x86_64.AppImage` 或 `ChineseLocaliser-0.1.0-linux-amd64.deb`。
+
+安装包未签名：Windows SmartScreen 与部分 Linux 桌面环境会提示来源未知，请自行核对 Release 页面与文件哈希。Ubuntu 22.04 运行 AppImage 需要 `libfuse2`；AppImage 桌面入口使用 `--no-sandbox`（Electron AppImage 的启动限制），需要完整 Chromium 沙箱时请使用 deb。安装包内置构建时同版本的 `cc-zh` 插件。
+
+### 源码运行
+
+环境：Windows 10/11 或 Ubuntu 22.04+、Node.js 20+（开发使用 Node 24）。
 
 ```bash
 cd app
@@ -44,9 +57,11 @@ npm start
 npm test          # 核心检测/备份/恢复单元测试
 npm run typecheck # TypeScript 类型检查
 npm run dev       # 构建后启动
+npm run dist:win  # 构建 Windows NSIS 安装包
+npm run dist:linux# 构建 AppImage 与 deb（需在 Linux 上执行）
 ```
 
-首次启动会自动检测三类软件；也可点击「重新检测」。全部数据保存在本机 `%APPDATA%\chinese-localiser`。
+首次启动会自动检测三类软件；也可点击「重新检测」。Windows 数据保存在 `%APPDATA%\chinese-localiser`，Linux 保存在 `~/.config/chinese-localiser`。
 
 若终端环境设置了 `ELECTRON_RUN_AS_NODE=1`，Electron 会以 Node 模式运行并报 `app.whenReady` 错误，启动前需取消该变量：
 
@@ -59,7 +74,7 @@ env -u ELECTRON_RUN_AS_NODE npm start
 - `app/package.json` 的 `version` 是唯一版本来源，界面与更新检查均读取该值。
 - 发布步骤：更新版本号与 [CHANGELOG.md](CHANGELOG.md) → 提交 → 创建 `vX.Y.Z` 标签 → 在 GitHub 创建同名 Release。
 - 设置页「检查更新」只读取最新 Release 的版本号并打开发布页，不自动下载或替换文件。
-- 版本为 `0.1.0`，尚未提供安装包；在打包实现前通过源码构建运行。
+- 版本为 `0.1.0`，提供 Windows 与 Ubuntu 安装包；推送 `vX.Y.Z` 标签时由 [GitHub Actions](.github/workflows/build-installers.yml) 构建并上传安装包。
 
 ## 3. 使用流程与状态
 
@@ -80,12 +95,12 @@ env -u ELECTRON_RUN_AS_NODE npm start
 
 ## 4. 支持矩阵
 
-| 工具 | 安装检测 | 汉化状态 | 应用汉化 | 卸载汉化 |
-| --- | --- | --- | --- | --- |
-| Claude Code CLI | 支持 | 支持 | 支持（官方插件扩展点） | 支持 |
-| Claude Code IDE 扩展 | 支持 | 仅说明 CLI 插件不影响扩展 | 不支持 | 不支持 |
-| Claude Desktop | 支持 | 支持 | 不支持 | 不支持 |
-| Antigravity | 支持 | 支持 | 不支持 | 不支持 |
+| 工具 | 平台 | 安装检测 | 汉化状态 | 应用汉化 | 卸载汉化 |
+| --- | --- | --- | --- | --- | --- |
+| Claude Code CLI | Windows / Ubuntu | 支持 | 支持 | 支持（官方插件扩展点） | 支持 |
+| Claude Code IDE 扩展 | Windows / Ubuntu | 支持 | 仅说明 CLI 插件不影响扩展 | 不支持 | 不支持 |
+| Claude Desktop | Windows / Ubuntu | 支持 | 支持 | 不支持 | 不支持 |
+| Antigravity | Windows / Ubuntu | 支持 | 支持 | 不支持 | 不支持 |
 
 详细版本、证据和限制见 [doc/support-matrix.md](doc/support-matrix.md)。参考项目位于 [example/](example/)，仅用于研究，不由应用执行。
 
@@ -105,8 +120,10 @@ app/
 │   └── test/                     单元与隔离集成测试
 ├── src/                          React 管理界面
 ├── scripts/sync-bundled-plugin.cjs
+├── build/                        安装包图标与生成脚本
 ├── vendor/cc-zh/                 内附插件源码及 MIT 许可证
 └── resources/plugins/cc-zh/      构建时同步的内置插件（已忽略）
+.github/workflows/                标签构建 Windows / Ubuntu 安装包
 example/                          参考项目（只读研究）
 doc/                              任务计划与支持矩阵
 ```
@@ -134,9 +151,10 @@ doc/                              任务计划与支持矩阵
 
 - Claude Code 汉化只覆盖插件已接线的部分终端文案；权限确认对话框、欢迎屏、错误信息、`claude --help` 等仍为英文。
 - 本机已安装其他中文插件时会识别为「外部汉化」并阻止本软件写入，需用户自行决定是否移除旧插件。
-- Claude Desktop 的 MSIX 安装受系统完整性保护，只能保证检测范围；不提供写入。
-- Antigravity 仅识别 `app.asar` 注入标记与备份，不区分不同版本的补丁实现。
-- 尚未提供安装包、自动更新、macOS / Linux 验证和界面视觉回归测试；更新检查仅提示版本，安装仍需手动完成。
+- Claude Desktop 的 MSIX 安装受系统完整性保护，只能保证检测范围；Linux deb 版补丁需 sudo 修改系统目录，本软件不自动提权，因此不提供写入。
+- Antigravity 仅识别 `app.asar` 注入标记与备份；Linux 版同样未接入 ASAR 注入写入。
+- Windows 与 Ubuntu 安装包均未签名，不能证明来源；请以 Release 页面和哈希为准。
+- 尚未提供自动更新、macOS 验证和界面视觉回归测试；更新检查仅提示版本，安装仍需手动完成。
 
 ## 8. 参与开发
 

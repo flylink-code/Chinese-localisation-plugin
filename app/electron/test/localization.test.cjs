@@ -14,7 +14,8 @@ const {
 } = require('../core/localization/claude-code.cjs')
 const { createStateStore, createHistoryStore } = require('../core/store.cjs')
 
-const TARGET = path.resolve('C:/localiser/plugins/cc-zh')
+const TARGET = path.join(os.tmpdir(), 'localiser-test-root', 'plugins', 'cc-zh')
+const OTHER = path.join(path.parse(os.tmpdir()).root, 'other-plugin')
 
 test('mergePluginDir 创建 env 键并保留其他设置', () => {
   const input = { language: 'zh-CN', env: { OTHER: '1' } }
@@ -27,23 +28,23 @@ test('mergePluginDir 创建 env 键并保留其他设置', () => {
 })
 
 test('mergePluginDir 追加字符串路径且不重复', () => {
-  const first = mergePluginDir({ env: { CLAUDE_CODE_PLUGIN_DIRS: 'C:\\other' } }, TARGET)
+  const first = mergePluginDir({ env: { CLAUDE_CODE_PLUGIN_DIRS: OTHER } }, TARGET)
   assert.equal(first.createdEnvKey, false)
-  assert.deepEqual(splitPluginDirs(first.settings.env.CLAUDE_CODE_PLUGIN_DIRS), ['C:\\other', TARGET])
+  assert.deepEqual(splitPluginDirs(first.settings.env.CLAUDE_CODE_PLUGIN_DIRS), [OTHER, TARGET])
   const second = mergePluginDir(first.settings, TARGET)
   assert.equal(splitPluginDirs(second.settings.env.CLAUDE_CODE_PLUGIN_DIRS).length, 2)
 })
 
 test('mergePluginDir 支持数组形式且拒绝非法 env', () => {
-  const merged = mergePluginDir({ env: { CLAUDE_CODE_PLUGIN_DIRS: ['C:\\other'] } }, TARGET)
-  assert.deepEqual(merged.settings.env.CLAUDE_CODE_PLUGIN_DIRS, ['C:\\other', TARGET])
+  const merged = mergePluginDir({ env: { CLAUDE_CODE_PLUGIN_DIRS: [OTHER] } }, TARGET)
+  assert.deepEqual(merged.settings.env.CLAUDE_CODE_PLUGIN_DIRS, [OTHER, TARGET])
   assert.throws(() => mergePluginDir({ env: 'bad' }, TARGET), /env 不是对象/)
 })
 
 test('removePluginDir 只移除本软件路径', () => {
-  const settings = { language: 'zh-CN', env: { CLAUDE_CODE_PLUGIN_DIRS: ['C:\\other', TARGET] } }
+  const settings = { language: 'zh-CN', env: { CLAUDE_CODE_PLUGIN_DIRS: [OTHER, TARGET] } }
   const output = removePluginDir(settings, TARGET, { createdEnvKey: false, settingsExisted: true })
-  assert.deepEqual(output.settings.env.CLAUDE_CODE_PLUGIN_DIRS, ['C:\\other'])
+  assert.deepEqual(output.settings.env.CLAUDE_CODE_PLUGIN_DIRS, [OTHER])
   assert.equal(output.settings.language, 'zh-CN')
   assert.equal(output.changed, true)
   assert.equal(output.deleteFile, false)
@@ -80,7 +81,7 @@ test('apply 与 uninstall 完成可恢复闭环并保留用户后续修改', asy
     await fsp.mkdir(path.dirname(settingsPath), { recursive: true })
     await fsp.writeFile(
       settingsPath,
-      JSON.stringify({ language: 'zh-CN', env: { CLAUDE_CODE_PLUGIN_DIRS: 'C:\\other-plugin' } }),
+      JSON.stringify({ language: 'zh-CN', env: { CLAUDE_CODE_PLUGIN_DIRS: OTHER } }),
     )
 
     const pluginRoot = path.join(root, 'userData', 'plugins')
@@ -94,7 +95,7 @@ test('apply 与 uninstall 完成可恢复闭环并保留用户后续修改', asy
       historyStore: createHistoryStore(path.join(root, 'userData', 'history.json')),
     })
 
-    const instance = { id: 'abc', path: 'C:\\fake\\claude.cmd' }
+    const instance = { id: 'abc', path: path.join(OTHER, 'claude.cmd') }
     const result = await service.apply(instance)
     assert.equal(result.ok, true)
 
@@ -105,7 +106,7 @@ test('apply 与 uninstall 完成可恢复闭环并保留用户后续修改', asy
         (item) => path.resolve(item) === path.resolve(path.join(pluginRoot, 'cc-zh')),
       ),
     )
-    assert.equal(settingsAfterApply.env.CLAUDE_CODE_PLUGIN_DIRS.includes('C:\\other-plugin'), true)
+    assert.equal(settingsAfterApply.env.CLAUDE_CODE_PLUGIN_DIRS.includes(OTHER), true)
     const inspect = await service.inspect()
     assert.equal(inspect.state?.pluginVersion, '0.1.0')
     assert.equal(inspect.configured, true)
@@ -118,7 +119,7 @@ test('apply 与 uninstall 完成可恢复闭环并保留用户后续修改', asy
     const settingsAfterUninstall = JSON.parse(await fsp.readFile(settingsPath, 'utf8'))
     assert.equal(settingsAfterUninstall.theme, 'dark', '保留用户在汉化后添加的修改')
     assert.equal(settingsAfterUninstall.language, 'zh-CN')
-    assert.deepEqual(splitPluginDirs(settingsAfterUninstall.env.CLAUDE_CODE_PLUGIN_DIRS), ['C:\\other-plugin'])
+    assert.deepEqual(splitPluginDirs(settingsAfterUninstall.env.CLAUDE_CODE_PLUGIN_DIRS), [OTHER])
     assert.equal(fs.existsSync(path.join(pluginRoot, 'cc-zh')), false)
 
     const history = await createHistoryStore(path.join(root, 'userData', 'history.json')).list()

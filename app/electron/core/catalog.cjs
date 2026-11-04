@@ -18,7 +18,7 @@ const TOOLS = [
     id: 'claude-desktop',
     name: 'Claude Desktop',
     vendor: 'Anthropic',
-    summary: 'Claude 桌面客户端，Windows 存在官网安装包与 MSIX 渠道。',
+    summary: 'Claude 桌面客户端，Windows 支持官网安装包与 MSIX，Linux 支持 deb 包。',
     icon: 'desktop',
     accent: '#c15f3c',
     forms: ['桌面应用'],

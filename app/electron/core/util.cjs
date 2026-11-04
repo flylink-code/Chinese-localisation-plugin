@@ -8,7 +8,9 @@ const { spawn } = require('node:child_process')
 
 function normalizePath(value) {
   if (!value) return ''
-  return path.resolve(value).replace(/[\\/]+$/, '').toLowerCase()
+  const resolved = path.resolve(value).replace(/[\\/]+$/, '')
+  // Windows 与 macOS 默认文件系统不区分大小写；Linux 必须区分。
+  return process.platform === 'linux' ? resolved : resolved.toLowerCase()
 }
 
 function samePath(a, b) {

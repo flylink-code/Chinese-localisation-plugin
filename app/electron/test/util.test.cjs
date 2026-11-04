@@ -22,8 +22,14 @@ test('isInside 阻止目录逃逸', () => {
   assert.equal(isInside(root, path.join(root, '..', 'other')), false)
 })
 
-test('normalizePath 统一大小写和尾部分隔符', () => {
-  assert.equal(normalizePath('C:/Data/Root/'), normalizePath('c:\\data\\root'))
+test('normalizePath 处理尾部分隔符与平台大小写规则', () => {
+  const base = path.resolve('Data', 'Root')
+  assert.equal(normalizePath(`${base}${path.sep}`), process.platform === 'linux' ? base : base.toLowerCase())
+  if (process.platform === 'linux') {
+    assert.notEqual(normalizePath('/Data/root'), normalizePath('/data/root'))
+  } else {
+    assert.equal(normalizePath('C:/Data/Root/'), normalizePath('c:\\data\\root'))
+  }
 })
 
 test('fileContainsAny 能跨分块边界找到标记', async () => {
