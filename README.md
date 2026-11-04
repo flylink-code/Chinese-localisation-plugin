@@ -35,8 +35,8 @@
 
 从 [GitHub Releases](https://github.com/flylink-code/Chinese-localisation-plugin/releases) 下载：
 
-- Windows：`ChineseLocaliser-0.1.0-windows-x64.exe`（NSIS 安装包）。
-- Ubuntu：`ChineseLocaliser-0.1.0-linux-x86_64.AppImage` 或 `ChineseLocaliser-0.1.0-linux-amd64.deb`。
+- Windows：`ChineseLocaliser-0.1.1-windows-x64.exe`（NSIS 安装包）。
+- Ubuntu：`ChineseLocaliser-0.1.1-linux-x86_64.AppImage` 或 `ChineseLocaliser-0.1.1-linux-amd64.deb`。
 
 安装包未签名：Windows SmartScreen 与部分 Linux 桌面环境会提示来源未知，请自行核对 Release 页面与文件哈希。Ubuntu 22.04 运行 AppImage 需要 `libfuse2`；AppImage 桌面入口使用 `--no-sandbox`（Electron AppImage 的启动限制），需要完整 Chromium 沙箱时请使用 deb。安装包内置构建时同版本的 `cc-zh` 插件。
 
@@ -74,7 +74,7 @@ env -u ELECTRON_RUN_AS_NODE npm start
 - `app/package.json` 的 `version` 是唯一版本来源，界面与更新检查均读取该值。
 - 发布步骤：更新版本号与 [CHANGELOG.md](CHANGELOG.md) → 提交 → 创建 `vX.Y.Z` 标签 → 在 GitHub 创建同名 Release。
 - 设置页「检查更新」只读取最新 Release 的版本号并打开发布页，不自动下载或替换文件。
-- 版本为 `0.1.0`，提供 Windows 与 Ubuntu 安装包；推送 `vX.Y.Z` 标签时由 [GitHub Actions](.github/workflows/build-installers.yml) 构建并上传安装包。
+- 版本为 `0.1.1`，提供 Windows 与 Ubuntu 安装包；推送 `vX.Y.Z` 标签时由 [GitHub Actions](.github/workflows/build-installers.yml) 构建并上传安装包。
 
 ## 3. 使用流程与状态
 

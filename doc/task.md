@@ -169,7 +169,7 @@
 
 依赖：P4。仅检测预览版可在 P2 后单独打包，须明确无写入能力。
 
-- [ ] P5-01：版本号（`0.1.0`，单一来源 `app/package.json`）、CHANGELOG、Windows NSIS 与 Ubuntu AppImage/deb 构建、GitHub Actions 标签构建已实现；干净环境安装测试与签名尚未完成。
+- [ ] P5-01：版本号（`0.1.1`，单一来源 `app/package.json`）、CHANGELOG、Windows NSIS 与 Ubuntu AppImage/deb 构建、GitHub Actions 标签构建已实现；干净环境安装测试与签名尚未完成。
 - [ ] P5-02：分别说明卸载汉化、卸载目标软件、卸载管理端三种行为；卸载管理端不隐式删除备份。
 - [ ] P5-03：完成首次启动、检测、应用、卸载汉化、更新冲突及管理端卸载验收。
 - [ ] P5-04：完善支持矩阵、隐私说明、已知问题、故障反馈和适配器接入指南。
