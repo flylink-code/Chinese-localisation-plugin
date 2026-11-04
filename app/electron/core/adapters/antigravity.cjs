@@ -14,6 +14,7 @@ const {
   normalizePath,
   makeId,
 } = require('../util.cjs')
+const { checkCompatibility, describeSource } = require('../external-catalog.cjs')
 
 const ANTIGRAVITY_MARKERS = ['__ANTIGRAVITY_CHINESE_LOCALIZATION_START__']
 
@@ -177,7 +178,15 @@ async function inspectApp(appDir, channel) {
     }
   }
 
-  return { resources, localization, evidence }
+  return { resources, localization, evidence, hasMarkers: markers.length > 0, hasBackup: backup, hasAsar }
+}
+
+/** 只读检查目标目录是否带有上游补丁标记，用于安装/卸载后的结果验证。 */
+async function hasAntigravityPatch(appDir) {
+  const asar = path.join(appDir, 'resources', 'app.asar')
+  if (!(await exists(asar))) return false
+  const found = await fileContainsAny(asar, ANTIGRAVITY_MARKERS)
+  return found.size > 0
 }
 
 async function detectAntigravity(ctx) {
@@ -207,6 +216,63 @@ async function detectAntigravity(ctx) {
     const inspected = await inspectApp(item.appDir, item.channel)
     if (!inspected) continue
     const versionInfo = await readVersion(item.appDir)
+    const external =
+      ctx.external?.instancePath &&
+      normalizePath(ctx.external.instancePath) === normalizePath(item.appDir)
+        ? ctx.external
+        : null
+    let localization = inspected.localization
+    if (external?.status === 'installed') {
+      localization = inspected.hasMarkers
+        ? {
+            state: 'managed',
+            label: '已汉化（社区源）',
+            detail: `由本软件调用上游安装器安装（${external.repo}@${String(external.commit).slice(0, 7)}），可通过本软件卸载。`,
+            evidence: inspected.evidence,
+            coverage: [],
+          }
+        : {
+            state: 'stale',
+            label: '汉化记录待确认',
+            detail: '本软件有安装记录，但未检测到注入标记；可能已被升级覆盖，可尝试卸载恢复。',
+            evidence: inspected.evidence,
+            coverage: [],
+          }
+    } else if (external?.status === 'failed') {
+      localization = {
+        state: 'stale',
+        label: '上次安装未完成',
+        detail: '上次社区源安装未成功完成；如已产生改动或备份，可通过本软件尝试恢复。',
+        evidence: inspected.evidence,
+        coverage: [],
+      }
+    }
+
+    const sourceInfo = describeSource('antigravity')
+    const compatibility = checkCompatibility('antigravity', { version: versionInfo.version })
+    const oursInstalled = external?.status === 'installed'
+    const hasExisting = Boolean(
+      oursInstalled ||
+        external?.status === 'failed' ||
+        inspected.hasMarkers ||
+        inspected.hasBackup ||
+        inspected.localization.state === 'external',
+    )
+    let applyCapability
+    if (!compatibility.ok) {
+      applyCapability = { kind: 'apply', enabled: false, reason: compatibility.reason }
+    } else {
+      applyCapability = {
+        kind: 'apply',
+        enabled: true,
+        label: hasExisting ? '重新汉化' : '下载并安装社区汉化',
+        reason: `将使用 ${sourceInfo.repo} 执行汉化脚本`,
+      }
+    }
+
+    const uninstallEnabled = hasExisting
+    const warnings = versionInfo.version ? [] : ['未能读取应用版本，界面仅显示检测结果。']
+    if (!compatibility.ok) warnings.push(`社区源不可用：${compatibility.reason}`)
     instances.push({
       id: makeId('antigravity', item.appDir),
       toolId: 'antigravity',
@@ -218,24 +284,32 @@ async function detectAntigravity(ctx) {
       versionSource: versionInfo.source,
       channel: item.channel,
       evidence: inspected.evidence,
-      localization: inspected.localization,
-      warnings: versionInfo.version ? [] : ['未能读取应用版本，界面仅显示检测结果。'],
+      localization,
+      warnings,
       installed: true,
       capabilities: [
-        {
-          kind: 'apply',
-          enabled: false,
-          reason: '该发行版的汉化引擎尚未接入；当前提供真实检测与状态查看',
-        },
+        applyCapability,
         {
           kind: 'uninstall',
-          enabled: false,
-          reason:
-            inspected.localization.state === 'external'
-              ? '检测到外部汉化，不由本软件管理'
-              : '未通过本软件安装汉化',
+          enabled: uninstallEnabled,
+          reason: uninstallEnabled
+            ? '运行上游还原脚本并从 app.asar.bak 恢复'
+            : '当前尚未安装汉化',
         },
       ],
+      support: {
+        summary: compatibility.ok
+          ? `已绑定 GitHub 汉化仓库 ${sourceInfo.repo}`
+          : `暂不支持写入：${compatibility.reason}`,
+        details: [
+          `安装渠道：${item.channel}。`,
+          `GitHub 仓库：${sourceInfo.repo}@${sourceInfo.branch}（${sourceInfo.versionText}）。`,
+        ],
+        link: {
+          label: '打开 GitHub 仓库主页',
+          url: `https://github.com/${sourceInfo.repo}`,
+        },
+      },
     })
   }
 
@@ -245,4 +319,9 @@ async function detectAntigravity(ctx) {
   return { instances, notes }
 }
 
-module.exports = { detectAntigravity, ANTIGRAVITY_MARKERS, resolveAppDir }
+module.exports = {
+  detectAntigravity,
+  ANTIGRAVITY_MARKERS,
+  resolveAppDir,
+  hasAntigravityPatch,
+}

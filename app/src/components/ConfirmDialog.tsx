@@ -22,12 +22,14 @@ export function ConfirmDialog({
   plan,
   busy,
   error,
+  progress,
   onConfirm,
   onClose,
 }: {
   plan: PreviewPlan
   busy: boolean
   error: string | null
+  progress: string | null
   onConfirm: () => void
   onClose: () => void
 }) {
@@ -46,7 +48,11 @@ export function ConfirmDialog({
           </div>
           <div>
             <h2 id="confirm-title">{plan.title}</h2>
-            <p>请确认本次变更。应用前会自动备份配置文件。</p>
+            <p>
+              {plan.source
+                ? '确认后将从 GitHub 下载固定提交并运行上游安装器，请完整阅读来源与风险。'
+                : '请确认本次变更。应用前会自动备份配置文件。'}
+            </p>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="关闭" disabled={busy}>
             <Icon name="x" size={18} />
@@ -54,6 +60,42 @@ export function ConfirmDialog({
         </header>
 
         <div className="modal-body">
+          {plan.source && (
+            <section>
+              <h3>汉化来源</h3>
+              <dl className="detail-grid">
+                <div>
+                  <dt>上游仓库</dt>
+                  <dd>github.com/{plan.source.repo}</dd>
+                </div>
+                <div>
+                  <dt>固定提交</dt>
+                  <dd>
+                    <code>{plan.source.shortCommit}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>许可证</dt>
+                  <dd>{plan.source.license ?? '上游未声明'}</dd>
+                </div>
+                <div>
+                  <dt>兼容版本</dt>
+                  <dd>{plan.source.versionText}</dd>
+                </div>
+                <div>
+                  <dt>归档校验</dt>
+                  <dd>
+                    <code>{plan.source.archiveSha256 ? `${plan.source.archiveSha256.slice(0, 16)}…` : '最新分支'}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>下载状态</dt>
+                  <dd>{plan.source.verified ? '已下载并通过 SHA-256 校验' : '确认后下载并校验'}</dd>
+                </div>
+              </dl>
+            </section>
+          )}
+
           <section>
             <h3>将执行的变更</h3>
             <ul className="change-list">
@@ -103,6 +145,13 @@ export function ConfirmDialog({
             </section>
           )}
 
+          {progress && (
+            <div className="notice update-result" role="status">
+              <span className="spinner" aria-hidden="true" />
+              <p>{progress}</p>
+            </div>
+          )}
+
           {error && (
             <div className="notice notice-danger" role="alert">
               <Icon name="alert" size={16} />
@@ -121,7 +170,13 @@ export function ConfirmDialog({
             disabled={busy}
           >
             {busy && <span className="spinner" aria-hidden="true" />}
-            {busy ? '正在处理…' : actionVerb[plan.action]}
+            {busy
+              ? '正在处理…'
+              : plan.action === 'apply' && plan.source
+                ? '确认下载并安装'
+                : plan.action === 'apply' && plan.takeover
+                  ? '确认替换外部汉化'
+                  : actionVerb[plan.action]}
           </button>
         </footer>
       </div>

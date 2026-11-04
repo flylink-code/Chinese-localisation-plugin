@@ -5,7 +5,6 @@ const path = require('node:path')
 const os = require('node:os')
 const {
   exists,
-  isDirectory,
   readJsonSafe,
   listDir,
   runCommand,
@@ -157,43 +156,51 @@ async function findIdeExtensions() {
   return results
 }
 
-async function scanPluginDirs(dirs, ownTarget, maxDepth = 4) {
-  const evidence = []
-  const seen = new Set()
-  let visited = 0
-  async function visit(root, depth) {
-    if (visited > 300 || depth > maxDepth) return
-    visited += 1
-    const manifestPath = path.join(root, '.claude-plugin', 'plugin.json')
-    if (await exists(manifestPath)) {
-      const key = normalizePath(root)
-      if (!seen.has(key)) {
-        seen.add(key)
-        const manifest = await readJsonSafe(manifestPath)
-        if (manifest.ok) {
-          const name = String(manifest.value?.name || '')
-          const description = String(manifest.value?.description || '')
-          if (name === 'cc-zh' || /中文|chinese|zh-CN/i.test(description)) {
-            evidence.push({
-              path: root,
-              name: name || '未知插件',
-              managed: normalizePath(root) === normalizePath(ownTarget),
-            })
-          }
-        }
-      }
-    }
-    if (depth === maxDepth) return
-    for (const entry of await listDir(root)) {
-      if (entry.isDirectory() && entry.name !== 'node_modules') {
-        await visit(path.join(root, entry.name), depth + 1)
+/** 读取 Claude Code 的插件登记表，用登记 ID 判断插件是否在设置中启用。 */
+async function readPluginRegistry() {
+  const file = path.join(os.homedir(), '.claude', 'plugins', 'installed_plugins.json')
+  const registry = await readJsonSafe(file)
+  if (!registry.ok || !registry.value?.plugins || typeof registry.value.plugins !== 'object') return []
+  const entries = []
+  for (const [id, installs] of Object.entries(registry.value.plugins)) {
+    if (!id.includes('@') || !Array.isArray(installs)) continue
+    for (const install of installs) {
+      if (install && typeof install.installPath === 'string' && install.installPath) {
+        entries.push({ id, installPath: install.installPath })
       }
     }
   }
-  for (const dir of dirs) {
-    if (await isDirectory(dir)) await visit(dir, 0)
+  return entries
+}
+
+function isChinesePlugin(manifest) {
+  const name = String(manifest?.name || '')
+  const description = String(manifest?.description || '')
+  return name === 'cc-zh' || /claude-code-zh/i.test(name) || /中文|chinese|zh-CN/i.test(description)
+}
+
+/** 列出已登记的中文插件及其启用状态；未登记目录不作为可接管对象。 */
+async function findExternalPlugins(settingsPath) {
+  const settings = await readJsonSafe(settingsPath)
+  const enabledPlugins = settings.ok ? settings.value?.enabledPlugins : undefined
+  const registry = await readPluginRegistry()
+  const byId = new Map()
+  for (const entry of registry) {
+    if (byId.has(entry.id)) continue
+    const manifest = await readJsonSafe(path.join(entry.installPath, '.claude-plugin', 'plugin.json'))
+    if (!manifest.ok || !isChinesePlugin(manifest.value)) continue
+    byId.set(entry.id, {
+      id: entry.id,
+      name: String(manifest.value.name || entry.id),
+      path: entry.installPath,
+      version: typeof manifest.value.version === 'string' ? manifest.value.version : null,
+      enabled:
+        enabledPlugins && typeof enabledPlugins === 'object' && !Array.isArray(enabledPlugins)
+          ? enabledPlugins[entry.id] !== false
+          : true,
+    })
   }
-  return evidence
+  return [...byId.values()]
 }
 
 function statusForClaudeCode(inspect, externalPlugins, settingsLanguage) {
@@ -231,14 +238,24 @@ function statusForClaudeCode(inspect, externalPlugins, settingsLanguage) {
       coverage: [],
     }
   }
-  const external = externalPlugins.filter((item) => !item.managed)
+  const external = externalPlugins.filter((item) => item.enabled)
   if (external.length) {
+    const names = external.map((item) => item.name).join('、')
     return {
       state: 'external',
       label: '外部汉化',
-      detail: '检测到其他来源的 Claude Code 中文插件，本软件不会覆盖',
-      evidence: external.map((item) => `${item.name}：${item.path}`),
+      detail: `检测到其他来源的中文插件：${names}。应用内置汉化时会停用它，卸载汉化时恢复。`,
+      evidence: external.map(
+        (item) => `${item.name}${item.version ? ` v${item.version}` : ''}：${item.path}`,
+      ),
       coverage: [],
+      externalPlugins: external.map(({ id, name, path, version, enabled }) => ({
+        id,
+        name,
+        path,
+        version,
+        enabled,
+      })),
     }
   }
   if (settingsLanguage) {
@@ -266,21 +283,32 @@ function capabilitiesFor({ form, localization, version }) {
     return capabilities
   }
   const versionCheck = version ? compareVersions(version, minVersion) : null
+  const versionBlock = !version
+    ? '无法确认 CLI 版本，暂不允许修改'
+    : versionCheck === -1
+      ? `该版本低于插件要求的 ${minVersion}`
+      : null
   if (localization.state === 'managed' || localization.state === 'stale') {
     capabilities.push({
       kind: 'apply',
-      enabled: false,
-      reason: localization.state === 'managed' ? '当前已由本软件汉化' : '请先卸载现有汉化配置',
+      enabled: !versionBlock,
+      label: '重新汉化',
+      reason: versionBlock || '使用当前仓库配置重新应用汉化',
     })
     capabilities.push({
       kind: 'uninstall',
-      enabled: localization.state === 'managed' || localization.state === 'stale',
-      reason: localization.state === 'stale' ? '可尝试移除本软件残留配置' : undefined,
+      enabled: true,
+      reason: localization.state === 'stale' ? '可尝试移除本软件残留配置' : '恢复原版英文界面',
     })
     return capabilities
   }
   if (localization.state === 'external') {
-    capabilities.push({ kind: 'apply', enabled: false, reason: '检测到外部汉化，避免覆盖其他插件' })
+    const names = (localization.externalPlugins || []).map((item) => item.name).join('、') || '外部中文插件'
+    capabilities.push({
+      kind: 'apply',
+      enabled: !versionBlock,
+      reason: versionBlock || `将停用外部中文插件：${names}（卸载汉化时恢复）`,
+    })
     capabilities.push({ kind: 'uninstall', enabled: false, reason: '外部汉化不由本软件管理' })
     return capabilities
   }
@@ -289,13 +317,8 @@ function capabilitiesFor({ form, localization, version }) {
     capabilities.push({ kind: 'uninstall', enabled: false, reason: '无法解析 settings.json' })
     return capabilities
   }
-  if (!version) {
-    capabilities.push({ kind: 'apply', enabled: false, reason: '无法确认 CLI 版本，暂不允许修改' })
-    capabilities.push({ kind: 'uninstall', enabled: false, reason: '未安装汉化' })
-    return capabilities
-  }
-  if (versionCheck === -1) {
-    capabilities.push({ kind: 'apply', enabled: false, reason: `该版本低于插件要求的 ${minVersion}` })
+  if (versionBlock) {
+    capabilities.push({ kind: 'apply', enabled: false, reason: versionBlock })
     capabilities.push({ kind: 'uninstall', enabled: false, reason: '未安装汉化' })
     return capabilities
   }
@@ -307,13 +330,9 @@ function capabilitiesFor({ form, localization, version }) {
 async function detectClaudeCode(ctx) {
   const { localizationService, manualPath } = ctx
   const inspect = await localizationService.inspect()
-  const externalRoots = [
-    ...inspect.allDirs,
-    path.join(os.homedir(), '.claude', 'plugins'),
-  ]
-  const externalPlugins = await scanPluginDirs(externalRoots, localizationService.pluginTarget)
   const settings = await readJsonSafe(localizationService.settingsPath)
   const language = settings.ok && typeof settings.value?.language === 'string' ? settings.value.language : null
+  const externalPlugins = await findExternalPlugins(localizationService.settingsPath)
   const localization = statusForClaudeCode(inspect, externalPlugins, language)
 
   const instances = []
@@ -391,4 +410,11 @@ async function detectClaudeCode(ctx) {
   return { instances, notes }
 }
 
-module.exports = { detectClaudeCode, findCliExecutables, findIdeExtensions, statusForClaudeCode }
+module.exports = {
+  detectClaudeCode,
+  findCliExecutables,
+  findIdeExtensions,
+  findExternalPlugins,
+  statusForClaudeCode,
+  capabilitiesFor,
+}

@@ -13,6 +13,8 @@ function createPaths(userDataDir) {
     historyFile: path.join(userDataDir, 'history.json'),
     backupRoot: path.join(userDataDir, 'backups'),
     pluginRoot: path.join(userDataDir, 'plugins'),
+    sourceRoot: path.join(userDataDir, 'sources'),
+    logRoot: path.join(userDataDir, 'logs'),
     claudeSettings: path.join(home, '.claude', 'settings.json'),
     appResourcesDir: path.resolve(__dirname, '..', '..', 'resources'),
   }

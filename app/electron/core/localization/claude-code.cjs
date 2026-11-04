@@ -20,6 +20,7 @@ const {
 
 const PLUGIN_VERSION_FALLBACK = '0.1.0'
 const SUPPORTED_MIN_VERSION = '2.1.287'
+const PLUGIN_SOURCE_URL = 'https://github.com/jiangnanquan/claude-code-zh'
 const REQUIRED_PATHS = [
   path.join('.claude-plugin', 'plugin.json'),
   path.join('hooks', 'hooks.json'),
@@ -80,7 +81,72 @@ function removePluginDir(settings, target, { createdEnvKey = false, settingsExis
   return { settings: next, changed, deleteFile }
 }
 
-async function validatePluginSource(sourceDir) {
+function enabledPluginsMap(settings) {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+    throw new Error('settings.json 顶层不是对象，已停止修改')
+  }
+  const map = settings.enabledPlugins
+  if (map === undefined) return {}
+  if (!map || typeof map !== 'object' || Array.isArray(map)) {
+    throw new Error('settings.json 的 enabledPlugins 不是对象，已停止修改')
+  }
+  return map
+}
+
+function setPluginEnabled(settings, pluginId, enabled) {
+  const map = enabledPluginsMap(settings)
+  const next = structuredClone(settings)
+  next.enabledPlugins = { ...map, [pluginId]: enabled }
+  return next
+}
+
+/** 停用外部中文插件；只处理当前确实启用的登记项，并记录原值供卸载时恢复。 */
+function disableExternalPlugins(settings, plugins) {
+  const map = enabledPluginsMap(settings)
+  let next = settings
+  const disabled = []
+  for (const plugin of plugins) {
+    const id = typeof plugin?.id === 'string' ? plugin.id : ''
+    if (!id || map[id] === false) continue
+    next = setPluginEnabled(next, id, false)
+    disabled.push({
+      id,
+      name: plugin.name || id,
+      previous: map[id] === undefined ? null : Boolean(map[id]),
+    })
+  }
+  return { settings: next, disabled }
+}
+
+/** 只恢复仍处于停用状态的条目；用户之后手动改过的不覆盖。 */
+function restoreExternalPlugins(settings, disabled) {
+  if (!disabled?.length) return { settings, restored: [] }
+  const map = enabledPluginsMap(settings)
+  let next = settings
+  const restored = []
+  for (const item of disabled) {
+    if (!item?.id || map[item.id] !== false) continue
+    if (item.previous === null || item.previous === undefined) {
+      const copy = structuredClone(next)
+      copy.enabledPlugins = { ...map }
+      delete copy.enabledPlugins[item.id]
+      if (Object.keys(copy.enabledPlugins).length === 0) delete copy.enabledPlugins
+      next = copy
+    } else {
+      next = setPluginEnabled(next, item.id, Boolean(item.previous))
+    }
+    restored.push(item)
+  }
+  return { settings: next, restored }
+}
+
+function authorName(value) {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  if (value && typeof value.name === 'string' && value.name.trim()) return value.name.trim()
+  return null
+}
+
+async function validatePluginSource(sourceDir, { allowCustomName = false } = {}) {
   if (!(await isDirectory(sourceDir))) {
     throw new Error('未找到内置 cc-zh 插件资源，请先在 app 目录运行 npm run sync:plugin')
   }
@@ -90,10 +156,16 @@ async function validatePluginSource(sourceDir) {
     }
   }
   const manifest = await readJsonSafe(path.join(sourceDir, '.claude-plugin', 'plugin.json'))
-  if (!manifest.ok || manifest.value?.name !== 'cc-zh') {
+  if (!manifest.ok || (!allowCustomName && manifest.value?.name !== 'cc-zh') || !manifest.value?.name) {
     throw new Error('内置插件清单无效，已停止操作')
   }
-  return { version: String(manifest.value.version || PLUGIN_VERSION_FALLBACK) }
+  return {
+    version: String(manifest.value.version || PLUGIN_VERSION_FALLBACK),
+    name: String(manifest.value.name),
+    author: authorName(manifest.value.author),
+    license: typeof manifest.value.license === 'string' ? manifest.value.license : null,
+    sourceUrl: PLUGIN_SOURCE_URL,
+  }
 }
 
 async function copyPlugin(sourceDir, targetDir) {
@@ -183,51 +255,79 @@ function createClaudeCodeLocalization(options) {
     return validatePluginSource(sourcePluginDir)
   }
 
-  async function preview(action, instance) {
+  async function preview(action, instance, externalPlugins = []) {
     const info = await sourceInfo()
     const state = (await stateStore.read()).claudeCode
+    const takeover = (externalPlugins || []).filter((item) => item?.id)
     const warnings = [
       '该设置写入当前用户的 ~/.claude/settings.json，会影响本机所有 Claude Code CLI 会话。',
       '插件只覆盖部分界面文案，未接入的位置仍显示英文。',
       '需要重新启动 Claude Code 或开启新会话后生效。',
     ]
+    if (takeover.length) {
+      warnings.push(
+        `将停用外部中文插件 ${takeover.map((item) => item.name).join('、')}；插件文件不会删除，也不撤销它对 Claude Code 程序文件做过的修改，卸载汉化时恢复启用状态。`,
+      )
+    }
     if (action === 'apply') {
+      const changes = [
+        { file: pluginTarget, action: 'create', summary: '复制 cc-zh 插件（官方插件扩展点）' },
+        {
+          file: settingsPath,
+          action: 'update',
+          summary: '在 env.CLAUDE_CODE_PLUGIN_DIRS 中追加插件目录，保留其他条目',
+        },
+      ]
+      if (takeover.length) {
+        changes.push({
+          file: settingsPath,
+          action: 'update',
+          summary: `停用外部中文插件 ${takeover.map((item) => item.name).join('、')}，记录原值以便卸载时恢复`,
+        })
+      }
+      changes.push({
+        file: '应用数据目录/backups/claude-code/<时间>/',
+        action: 'create',
+        summary: '修改前备份 settings.json',
+      })
       return {
         action,
-        title: '应用 Claude Code 汉化',
+        title: takeover.length ? '替换外部汉化为内置汉化' : '应用 Claude Code 汉化',
         instancePath: instance?.path || null,
         pluginVersion: info.version,
         requirements: [`Claude Code CLI ≥ ${SUPPORTED_MIN_VERSION}`],
-        changes: [
-          { file: pluginTarget, action: 'create', summary: '复制 cc-zh 插件（官方插件扩展点）' },
-          {
-            file: settingsPath,
-            action: 'update',
-            summary: '在 env.CLAUDE_CODE_PLUGIN_DIRS 中追加插件目录，保留其他条目',
-          },
-          { file: '应用数据目录/backups/claude-code/<时间>/', action: 'create', summary: '修改前备份 settings.json' },
-        ],
+        changes,
         coverage: coverage(),
         warnings,
+        takeover: takeover.length > 0,
       }
     }
     if (action === 'uninstall') {
       if (!state) throw new Error('没有找到本软件的安装记录，无法卸载汉化')
+      const changes = [
+        {
+          file: settingsPath,
+          action: 'update',
+          summary: '仅移除本软件写入的插件目录，保留其他插件与用户设置',
+        },
+        { file: pluginTarget, action: 'delete', summary: '删除本软件复制的插件目录' },
+        { file: '应用数据目录/backups/claude-code/', action: 'keep', summary: '保留历史备份，供手动恢复' },
+      ]
+      const disabled = Array.isArray(state.disabledPlugins) ? state.disabledPlugins : []
+      if (disabled.length) {
+        changes.push({
+          file: settingsPath,
+          action: 'update',
+          summary: `恢复此前停用的外部中文插件 ${disabled.map((item) => item.name || item.id).join('、')}`,
+        })
+      }
       return {
         action,
         title: '卸载 Claude Code 汉化',
         instancePath: state.instancePath || instance?.path || null,
         pluginVersion: info.version,
         requirements: [],
-        changes: [
-          {
-            file: settingsPath,
-            action: 'update',
-            summary: '仅移除本软件写入的插件目录，保留其他插件与用户设置',
-          },
-          { file: pluginTarget, action: 'delete', summary: '删除本软件复制的插件目录' },
-          { file: '应用数据目录/backups/claude-code/', action: 'keep', summary: '保留历史备份，供手动恢复' },
-        ],
+        changes,
         coverage: ['恢复英文界面'],
         warnings: ['需要重新启动 Claude Code 或开启新会话后生效。'],
       }
@@ -235,10 +335,12 @@ function createClaudeCodeLocalization(options) {
     throw new Error('不支持的操作')
   }
 
-  async function apply(instance) {
+  async function apply(instance, { externalPlugins = [], customPluginDir = null, repo = null, takeoverExternal = true } = {}) {
     let backup = null
     try {
-      await sourceInfo()
+      const effectiveSourceDir = customPluginDir || sourcePluginDir
+      await validatePluginSource(effectiveSourceDir, { allowCustomName: Boolean(customPluginDir) })
+      const prevState = (await stateStore.read()).claudeCode
       const settingsExisted = await exists(settingsPath)
       const parsed = settingsExisted
         ? await readJsonSafe(settingsPath)
@@ -248,11 +350,17 @@ function createClaudeCodeLocalization(options) {
       }
       backup = await backupSettings()
       const merged = mergePluginDir(parsed.value, pluginTarget)
-      await copyPlugin(sourcePluginDir, pluginTarget)
+      const shouldTakeover = takeoverExternal !== false && externalPlugins.length > 0
+      const takeover = shouldTakeover
+        ? disableExternalPlugins(merged.settings, externalPlugins)
+        : { settings: merged.settings, disabled: [] }
+      await copyPlugin(effectiveSourceDir, pluginTarget)
       try {
-        await writeFileAtomic(settingsPath, `${JSON.stringify(merged.settings, null, 2)}\n`)
+        await writeFileAtomic(settingsPath, `${JSON.stringify(takeover.settings, null, 2)}\n`)
       } catch (error) {
-        await fsp.rm(pluginTarget, { recursive: true, force: true }).catch(() => {})
+        if (!prevState) {
+          await fsp.rm(pluginTarget, { recursive: true, force: true }).catch(() => {})
+        }
         throw error
       }
       const verify = await readJsonSafe(settingsPath)
@@ -260,7 +368,19 @@ function createClaudeCodeLocalization(options) {
       if (!verify.ok || !includesPath(dirs, pluginTarget)) {
         throw new Error('写入后校验失败：settings.json 未包含插件目录')
       }
-      const manifest = await readJsonSafe(path.join(sourcePluginDir, '.claude-plugin', 'plugin.json'))
+      const stillEnabled = takeover.disabled.filter(
+        (item) => verify.value?.enabledPlugins?.[item.id] !== false,
+      )
+      if (stillEnabled.length) {
+        throw new Error(`写入后校验失败：外部插件仍未停用（${stillEnabled.map((item) => item.name).join('、')}）`)
+      }
+      const manifest = await readJsonSafe(path.join(effectiveSourceDir, '.claude-plugin', 'plugin.json'))
+      const combinedDisabled = [...(prevState?.disabledPlugins || [])]
+      for (const item of takeover.disabled) {
+        if (!combinedDisabled.some((prev) => prev.id === item.id)) {
+          combinedDisabled.push(item)
+        }
+      }
       await stateStore.setClaudeCode({
         pluginTarget,
         settingsPath,
@@ -268,9 +388,11 @@ function createClaudeCodeLocalization(options) {
         instanceId: instance?.id || null,
         installedAt: new Date().toISOString(),
         pluginVersion: String(manifest.value?.version || PLUGIN_VERSION_FALLBACK),
+        repo: repo || 'jiangnanquan/claude-code-zh',
         backupDir: backup.dir,
-        settingsExisted: backup.settingsExisted,
-        createdEnvKey: merged.createdEnvKey,
+        settingsExisted: prevState ? Boolean(prevState.settingsExisted) : backup.settingsExisted,
+        createdEnvKey: prevState ? Boolean(prevState.createdEnvKey) : merged.createdEnvKey,
+        disabledPlugins: combinedDisabled,
       })
       const entry = {
         id: makeId('apply', Date.now()),
@@ -280,10 +402,12 @@ function createClaudeCodeLocalization(options) {
         toolName: 'Claude Code',
         instancePath: instance?.path || null,
         result: 'success',
-        summary: '已复制 cc-zh 插件并写入用户级插件目录配置',
+        summary: takeover.disabled.length
+          ? `已复制 cc-zh 插件并写入用户级插件目录配置，停用外部插件 ${takeover.disabled.map((item) => item.name).join('、')}`
+          : '已复制 cc-zh 插件并写入用户级插件目录配置',
       }
       await historyStore.append(entry)
-      return { ok: true, message: '汉化已应用，请重新启动 Claude Code 或开启新会话。', backupDir: backup.dir }
+      return { ok: true, message: 'Claude Code 汉化配置已生效，请重新启动 Claude Code 或开启新会话。', backupDir: backup.dir }
     } catch (error) {
       await historyStore
         .append({
@@ -315,14 +439,17 @@ function createClaudeCodeLocalization(options) {
       throw new Error('settings.json 不是有效 JSON，已停止卸载以避免破坏配置')
     }
     await backupSettings()
-    const next = removePluginDir(parsed.value, pluginTarget, {
+    const removal = removePluginDir(parsed.value, pluginTarget, {
       createdEnvKey: Boolean(state.createdEnvKey),
       settingsExisted: Boolean(state.settingsExisted),
     })
-    if (next.deleteFile) {
+    const restored = removal.deleteFile
+      ? { settings: removal.settings, restored: [] }
+      : restoreExternalPlugins(removal.settings, state.disabledPlugins)
+    if (removal.deleteFile) {
       await fsp.rm(settingsPath, { force: true })
-    } else if (next.changed || state.createdEnvKey) {
-      await writeFileAtomic(settingsPath, `${JSON.stringify(next.settings, null, 2)}\n`)
+    } else if (removal.changed || state.createdEnvKey || restored.restored.length) {
+      await writeFileAtomic(settingsPath, `${JSON.stringify(restored.settings, null, 2)}\n`)
     }
     if (await exists(pluginTarget)) {
       const marker = await readJsonSafe(path.join(pluginTarget, MARKER_FILE))
@@ -340,9 +467,16 @@ function createClaudeCodeLocalization(options) {
       toolName: 'Claude Code',
       instancePath: state.instancePath || null,
       result: 'success',
-      summary: '已移除本软件写入的插件目录配置，原英文界面恢复',
+      summary: restored.restored.length
+        ? `已移除本软件写入的插件目录配置，并恢复外部插件 ${restored.restored.map((item) => item.name).join('、')}`
+        : '已移除本软件写入的插件目录配置，原英文界面恢复',
     })
-    return { ok: true, message: '汉化已卸载，请重新启动 Claude Code 或开启新会话。' }
+    return {
+      ok: true,
+      message: restored.restored.length
+        ? '汉化已卸载，外部中文插件已恢复启用；请重新启动 Claude Code 或开启新会话。'
+        : '汉化已卸载，请重新启动 Claude Code 或开启新会话。',
+    }
   }
 
   async function inspect() {
@@ -381,6 +515,8 @@ module.exports = {
   removePluginDir,
   splitPluginDirs,
   includesPath,
+  disableExternalPlugins,
+  restoreExternalPlugins,
   validatePluginSource,
   SUPPORTED_MIN_VERSION,
   COPIED_ENTRIES,

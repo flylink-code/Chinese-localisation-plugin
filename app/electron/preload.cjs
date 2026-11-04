@@ -12,10 +12,22 @@ contextBridge.exposeInMainWorld('localiser', {
     return () => ipcRenderer.removeListener('detect:event', listener)
   },
   choosePath: (toolId) => ipcRenderer.invoke('path:choose', toolId),
+  pickDirectory: (title) => ipcRenderer.invoke('path:pick-directory', title),
   clearPath: (toolId) => ipcRenderer.invoke('path:clear', toolId),
+  syncRepo: (payload) => ipcRenderer.invoke('repo:sync', payload),
+  setRepoConfig: (payload) => ipcRenderer.invoke('repo:set-config', payload),
+  setToolOptions: (payload) => ipcRenderer.invoke('tool:set-options', payload),
+  runExtraAction: (payload) => ipcRenderer.invoke('tool:extra-action', payload),
+  saveCustomTool: (item) => ipcRenderer.invoke('custom-tool:save', item),
+  removeCustomTool: (toolId) => ipcRenderer.invoke('custom-tool:remove', toolId),
   previewLocalization: (payload) => ipcRenderer.invoke('localization:preview', payload),
   applyLocalization: (payload) => ipcRenderer.invoke('localization:apply', payload),
   uninstallLocalization: (payload) => ipcRenderer.invoke('localization:uninstall', payload),
+  onExternalEvent: (callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('external:event', listener)
+    return () => ipcRenderer.removeListener('external:event', listener)
+  },
   listHistory: () => ipcRenderer.invoke('history:list'),
   openPath: (kind) => ipcRenderer.invoke('app:open-path', kind),
   setTheme: (theme) => ipcRenderer.invoke('app:set-theme', theme),

@@ -32,6 +32,42 @@ const TOOLS = [
     accent: '#4f6bff',
     forms: ['桌面应用'],
   },
+  {
+    id: 'cursor',
+    name: 'Cursor',
+    vendor: 'Anysphere',
+    summary: 'AI 原生代码编辑器，支持全量词典替换与备份还原。',
+    icon: 'apps',
+    accent: '#0ea5e9',
+    forms: ['桌面应用'],
+  },
+  {
+    id: 'codex-desktop',
+    name: 'Codex Desktop',
+    vendor: 'OpenAI',
+    summary: 'OpenAI Codex 桌面客户端，支持免改包语言注入与便携版汉化。',
+    icon: 'desktop',
+    accent: '#10a37f',
+    forms: ['桌面应用'],
+  },
+  {
+    id: 'kiro',
+    name: 'Kiro',
+    vendor: 'AWS Kiro',
+    summary: 'AWS Agentic AI IDE，支持简体/繁体中文语言包与界面补丁。',
+    icon: 'sparkles',
+    accent: '#8b5cf6',
+    forms: ['桌面应用'],
+  },
+  {
+    id: 'opencode',
+    name: 'OpenCode',
+    vendor: 'Anomaly',
+    summary: '开源终端 AI 编程 Agent，支持 TUI 渲染层词典插件与中文终端构建版。',
+    icon: 'terminal',
+    accent: '#f59e0b',
+    forms: ['CLI / TUI'],
+  },
 ]
 
 const TOOL_IDS = TOOLS.map((tool) => tool.id)

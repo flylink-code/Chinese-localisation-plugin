@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from './api'
-import { ConfirmDialog } from './components/ConfirmDialog'
+import { CustomToolModal } from './components/CustomToolModal'
 import { DetailsDrawer } from './components/DetailsDrawer'
 import { Icon } from './components/Icon'
-import { ToolCard } from './components/ToolCard'
+import { type CardAction, ToolCard } from './components/ToolCard'
 import type {
   AppConfig,
   Bootstrap,
+  CustomToolItem,
   DetectEvent,
+  ExternalEvent,
+  ExternalSourceInfo,
   HistoryEntry,
-  PreviewPlan,
+  RepoConfig,
   ToolDefinition,
   ToolId,
   ToolInstance,
@@ -18,19 +21,12 @@ import type {
 } from './types'
 
 type Page = 'apps' | 'history' | 'settings'
-type StatusFilter = 'all' | 'localized' | 'pending' | 'attention'
-type DialogState = {
-  plan: PreviewPlan
-  toolId: ToolId
-  instance: ToolInstance | null
-  action: 'apply' | 'uninstall'
-}
+type StatusFilter = 'all' | 'localized' | 'pending'
 
 const STATUS_LABELS: Record<StatusFilter, string> = {
   all: '全部状态',
   localized: '已汉化',
   pending: '未汉化',
-  attention: '需关注',
 }
 
 function idleResult(toolId: ToolId): ToolResult {
@@ -73,10 +69,6 @@ function isLocalized(state: ToolInstance['localization']['state']) {
   return state === 'managed' || state === 'native' || state === 'external'
 }
 
-function isAttention(state: ToolInstance['localization']['state']) {
-  return state === 'stale' || state === 'unknown' || state === 'partial'
-}
-
 export default function App() {
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null)
   const [bootError, setBootError] = useState<string | null>(null)
@@ -85,13 +77,13 @@ export default function App() {
   const [lastDetected, setLastDetected] = useState<string | null>(null)
   const [page, setPage] = useState<Page>('apps')
   const [query, setQuery] = useState('')
-  const [installedOnly, setInstalledOnly] = useState(true)
+  const [installedOnly, setInstalledOnly] = useState(false)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [drawerToolId, setDrawerToolId] = useState<ToolId | null>(null)
   const [selectedInstanceIds, setSelectedInstanceIds] = useState<Record<string, string>>({})
-  const [dialog, setDialog] = useState<DialogState | null>(null)
-  const [dialogBusy, setDialogBusy] = useState(false)
-  const [dialogError, setDialogError] = useState<string | null>(null)
+  const [showCustomModal, setShowCustomModal] = useState(false)
+  const [activeToolId, setActiveToolId] = useState<ToolId | null>(null)
+  const [externalProgress, setExternalProgress] = useState<ExternalEvent | null>(null)
   const [toast, setToast] = useState<{ message: string; tone: 'success' | 'danger' | 'info' } | null>(null)
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('system')
@@ -108,7 +100,7 @@ export default function App() {
   const showToast = useCallback((message: string, tone: 'success' | 'danger' | 'info' = 'info') => {
     setToast({ message, tone })
     if (toastTimer.current) window.clearTimeout(toastTimer.current)
-    toastTimer.current = window.setTimeout(() => setToast(null), 4200)
+    toastTimer.current = window.setTimeout(() => setToast(null), 4600)
   }, [])
 
   const refreshHistory = useCallback(async () => {
@@ -119,51 +111,47 @@ export default function App() {
     }
   }, [showToast])
 
-  const runDetection = useCallback(async () => {
-    if (!bootstrap || detecting) return
-    const runId = crypto.randomUUID()
-    runIdRef.current = runId
-    const previous = resultsRef.current
-    setDetecting(true)
-    setResults((current) => {
-      const next = { ...current }
-      for (const tool of bootstrap.tools) next[tool.id] = { ...idleResult(tool.id), status: 'scanning' }
-      return next
-    })
-    try {
-      const output = await api.detect(runId)
-      if (output.cancelled) {
-        setResults(previous)
-        showToast('已取消检测', 'info')
-      } else {
-        const merged: Record<string, ToolResult> = {}
-        for (const tool of bootstrap.tools) {
-          merged[tool.id] =
-            output.results.find((item) => item.toolId === tool.id) ?? {
-              ...idleResult(tool.id),
-              status: 'error',
-              error: '未返回检测结果',
-            }
+  const runDetection = useCallback(
+    async (toolsOverride?: ToolDefinition[]) => {
+      const targetTools = toolsOverride ?? bootstrap?.tools
+      if (!targetTools || detecting) return
+      const runId = crypto.randomUUID()
+      runIdRef.current = runId
+      const previous = resultsRef.current
+      setDetecting(true)
+      setResults((current) => {
+        const next = { ...current }
+        for (const tool of targetTools) next[tool.id] = { ...idleResult(tool.id), status: 'scanning' }
+        return next
+      })
+      try {
+        const output = await api.detect(runId)
+        if (output.cancelled) {
+          setResults(previous)
+          showToast('已取消检测', 'info')
+        } else {
+          const merged: Record<string, ToolResult> = {}
+          for (const tool of targetTools) {
+            merged[tool.id] =
+              output.results.find((item) => item.toolId === tool.id) ?? {
+                ...idleResult(tool.id),
+                status: 'error',
+                error: '未返回检测结果',
+              }
+          }
+          setResults(merged)
+          setLastDetected(new Date().toISOString())
         }
-        setResults(merged)
-        setLastDetected(new Date().toISOString())
-        const installed = output.results.filter((item) => item.status === 'ok').length
-        const failed = output.results.filter((item) => item.status === 'error').length
-        showToast(
-          failed > 0
-            ? `检测完成：${installed} 个软件已安装，${failed} 个检测失败`
-            : `检测完成：发现 ${installed} 个已安装软件`,
-          failed > 0 ? 'danger' : 'success',
-        )
+      } catch (error) {
+        setResults(previous)
+        showToast(`检测失败：${(error as Error).message}`, 'danger')
+      } finally {
+        runIdRef.current = null
+        setDetecting(false)
       }
-    } catch (error) {
-      setResults(previous)
-      showToast(`检测失败：${(error as Error).message}`, 'danger')
-    } finally {
-      runIdRef.current = null
-      setDetecting(false)
-    }
-  }, [bootstrap, detecting, showToast])
+    },
+    [bootstrap?.tools, detecting, showToast],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -187,10 +175,9 @@ export default function App() {
 
   useEffect(() => {
     if (!bootstrap) return
-    void runDetection()
-    // 首次加载后执行一次自动检测
+    void runDetection(bootstrap.tools)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootstrap])
+  }, [bootstrap?.version])
 
   useEffect(() => {
     const unsubscribe = api.onDetectEvent((event: DetectEvent) => {
@@ -217,6 +204,10 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    return api.onExternalEvent((event) => setExternalProgress(event))
+  }, [])
+
+  useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const apply = () => {
       const resolved = theme === 'system' ? (media.matches ? 'dark' : 'light') : theme
@@ -229,31 +220,35 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      if (dialog && !dialogBusy) setDialog(null)
-      else if (drawerToolId && !dialog) setDrawerToolId(null)
+      if (event.key !== 'Escape' || busy) return
+      if (showCustomModal) setShowCustomModal(false)
+      else if (drawerToolId) setDrawerToolId(null)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [dialog, dialogBusy, drawerToolId])
+  }, [busy, showCustomModal, drawerToolId])
 
   const tools = bootstrap?.tools ?? []
   const toolMap = useMemo(() => new Map(tools.map((tool) => [tool.id, tool])), [tools])
+  const sourceMap = useMemo(() => {
+    const map = new Map<string, ExternalSourceInfo>()
+    for (const src of bootstrap?.externalSources ?? []) {
+      map.set(src.id, src)
+    }
+    return map
+  }, [bootstrap?.externalSources])
 
   const stats = useMemo(() => {
     let installed = 0
     let localized = 0
-    let attention = 0
     for (const tool of tools) {
       const result = results[tool.id]
       if (!result) continue
       if (result.status === 'ok') installed += 1
       const primary = result.instances[0]
       if (primary && isLocalized(primary.localization.state)) localized += 1
-      if (primary && isAttention(primary.localization.state)) attention += 1
-      if (result.status === 'error') attention += 1
     }
-    return { installed, localized, attention }
+    return { installed, localized }
   }, [tools, results])
 
   const visibleTools = useMemo(() => {
@@ -267,15 +262,13 @@ export default function App() {
       const primary = result.instances[0]
       if (statusFilter === 'localized' && !(primary && isLocalized(primary.localization.state))) return false
       if (statusFilter === 'pending' && !(result.status === 'ok' && primary?.localization.state === 'none')) return false
-      if (statusFilter === 'attention') {
-        const badState = primary && isAttention(primary.localization.state)
-        if (!badState && result.status !== 'error') return false
-      }
       if (keyword) {
+        const src = sourceMap.get(tool.id)
         const haystack = [
           tool.name,
           tool.vendor,
           tool.summary,
+          src?.repo ?? '',
           primary?.path ?? '',
           primary?.version ?? '',
           result.error ?? '',
@@ -286,11 +279,16 @@ export default function App() {
       }
       return true
     })
-  }, [tools, results, installedOnly, statusFilter, query])
+  }, [tools, results, installedOnly, statusFilter, query, sourceMap])
 
   const drawerTool = drawerToolId ? toolMap.get(drawerToolId) ?? null : null
   const drawerResult = drawerTool ? results[drawerTool.id] : null
+  const drawerSource = drawerTool ? sourceMap.get(drawerTool.id) ?? null : null
   const manualPath = (toolId: ToolId) => bootstrap?.config.manualPaths?.[toolId] ?? null
+
+  const updateBootstrapState = (patch: Partial<Bootstrap>) => {
+    setBootstrap((current) => (current ? { ...current, ...patch } : current))
+  }
 
   const updateConfig = (config: AppConfig) => {
     setBootstrap((current) => (current ? { ...current, config } : current))
@@ -300,15 +298,12 @@ export default function App() {
     setBusy(true)
     try {
       const output = await api.choosePath(toolId)
-      if (output.canceled || !output.config) {
-        showToast('已取消选择', 'info')
-        return
-      }
+      if (output.canceled || !output.config) return
       updateConfig(output.config)
-      showToast('安装路径已更新，正在重新检测', 'success')
+      showToast('安装目录已更新，正在重新检测…', 'success')
       await runDetection()
     } catch (error) {
-      showToast(`选择路径失败：${(error as Error).message}`, 'danger')
+      showToast(`选择目录失败：${(error as Error).message}`, 'danger')
     } finally {
       setBusy(false)
     }
@@ -319,7 +314,7 @@ export default function App() {
     try {
       const output = await api.clearPath(toolId)
       updateConfig(output.config)
-      showToast('已清除手动路径', 'success')
+      showToast('已恢复自动检测路径', 'success')
       await runDetection()
     } catch (error) {
       showToast(`清除路径失败：${(error as Error).message}`, 'danger')
@@ -328,59 +323,193 @@ export default function App() {
     }
   }
 
-  const openPreview = async (toolId: ToolId, action: 'apply' | 'uninstall', instance: ToolInstance | null) => {
+  /** 一键同步 GitHub 汉化仓库最新代码 */
+  const executeSyncRepo = async (toolId: ToolId) => {
+    setBusy(true)
+    setActiveToolId(toolId)
+    setExternalProgress({ toolId, phase: 'download', message: '正在连接 GitHub 同步最新仓库代码…' })
+    try {
+      const output = await api.syncRepo({ toolId })
+      updateBootstrapState({ externalSources: output.externalSources })
+      showToast(output.message, 'success')
+      await refreshHistory()
+    } catch (error) {
+      showToast(`同步仓库失败：${(error as Error).message}`, 'danger')
+    } finally {
+      setBusy(false)
+      setActiveToolId(null)
+      setExternalProgress(null)
+    }
+  }
+
+  /** 直接执行一键汉化 / 重新汉化（无预览弹窗） */
+  const executeApply = async (toolId: ToolId, instance?: ToolInstance | null) => {
+    const target = instance ?? results[toolId]?.instances[0] ?? null
+    setBusy(true)
+    setActiveToolId(toolId)
+    setExternalProgress({ toolId, phase: 'prepare', message: '正在准备并执行汉化配置…' })
+    try {
+      const output = await api.applyLocalization({
+        toolId,
+        instanceId: target?.id ?? '',
+      })
+      if (output.externalSources) {
+        updateBootstrapState({ externalSources: output.externalSources })
+      }
+      showToast(output.message, 'success')
+      await runDetection()
+      await refreshHistory()
+    } catch (error) {
+      showToast(`汉化执行失败：${(error as Error).message}`, 'danger')
+      await runDetection()
+      await refreshHistory()
+    } finally {
+      setBusy(false)
+      setActiveToolId(null)
+      setExternalProgress(null)
+    }
+  }
+
+  /** 直接执行恢复原版 */
+  const executeUninstall = async (toolId: ToolId, instance?: ToolInstance | null) => {
+    const target = instance ?? results[toolId]?.instances[0] ?? null
+    setBusy(true)
+    setActiveToolId(toolId)
+    setExternalProgress({ toolId, phase: 'uninstall', message: '正在运行还原脚本恢复原版…' })
+    try {
+      const output = await api.uninstallLocalization({
+        toolId,
+        instanceId: target?.id,
+      })
+      showToast(output.message, 'success')
+      await runDetection()
+      await refreshHistory()
+    } catch (error) {
+      showToast(`恢复原版失败：${(error as Error).message}`, 'danger')
+      await runDetection()
+      await refreshHistory()
+    } finally {
+      setBusy(false)
+      setActiveToolId(null)
+      setExternalProgress(null)
+    }
+  }
+
+  /** 直接执行仓库附加配置动作（如禁更新、同步技能） */
+  const executeExtraAction = async (toolId: ToolId, actionId: string) => {
+    const target = results[toolId]?.instances[0] ?? null
+    setBusy(true)
+    setActiveToolId(toolId)
+    setExternalProgress({ toolId, phase: 'extra', message: '正在执行仓库配置命令…' })
+    try {
+      const output = await api.runExtraAction({
+        toolId,
+        actionId,
+        instanceId: target?.id,
+      })
+      showToast(output.message, 'success')
+      await refreshHistory()
+    } catch (error) {
+      showToast((error as Error).message, 'danger')
+    } finally {
+      setBusy(false)
+      setActiveToolId(null)
+      setExternalProgress(null)
+    }
+  }
+
+  /** 即改即存卡片上的可视化参数 */
+  const handleOptionChange = async (toolId: ToolId, key: string, value: unknown) => {
+    try {
+      const output = await api.setToolOptions({
+        toolId,
+        options: { [key]: value },
+      })
+      updateBootstrapState({
+        config: output.config,
+        externalSources: output.externalSources,
+      })
+    } catch (error) {
+      showToast(`保存选项失败：${(error as Error).message}`, 'danger')
+    }
+  }
+
+  /** 保存工具的 GitHub 仓库地址与分支配置 */
+  const handleSaveRepo = async (toolId: ToolId, repoConfig: RepoConfig | null, andSync = false) => {
     setBusy(true)
     try {
-      const plan = await api.previewLocalization({
-        toolId,
-        action,
-        instance,
-        instanceId: instance?.id,
+      const output = await api.setRepoConfig({ toolId, repoConfig })
+      updateBootstrapState({
+        config: output.config,
+        externalSources: output.externalSources,
       })
-      setDialogError(null)
-      setDialog({ plan, toolId, instance, action })
+      showToast(repoConfig ? `已绑定仓库 ${repoConfig.repo}@${repoConfig.branch}` : '已恢复默认 GitHub 仓库', 'success')
     } catch (error) {
-      showToast(`无法生成变更预览：${(error as Error).message}`, 'danger')
+      showToast(`保存仓库配置失败：${(error as Error).message}`, 'danger')
+      setBusy(false)
+      return
+    }
+    setBusy(false)
+    if (andSync) {
+      await executeSyncRepo(toolId)
+    }
+  }
+
+  const handleSaveCustomTool = async (item: Partial<CustomToolItem>) => {
+    setBusy(true)
+    try {
+      const output = await api.saveCustomTool(item)
+      updateBootstrapState({
+        config: output.config,
+        tools: output.tools,
+        externalSources: output.externalSources,
+      })
+      setShowCustomModal(false)
+      showToast(`已添加「${output.tool.name}」并绑定仓库 ${output.tool.repo}`, 'success')
+      await runDetection(output.tools)
     } finally {
       setBusy(false)
     }
   }
 
-  const handleCardAction = (tool: ToolDefinition, action: 'apply' | 'uninstall' | 'details' | 'choose-path') => {
-    const result = results[tool.id]
+  const handleRemoveCustomTool = async (toolId: ToolId) => {
+    setBusy(true)
+    try {
+      const output = await api.removeCustomTool(toolId)
+      updateBootstrapState({
+        config: output.config,
+        tools: output.tools,
+        externalSources: output.externalSources,
+      })
+      setDrawerToolId(null)
+      showToast('已删除该自定义软件配置', 'info')
+      await runDetection(output.tools)
+    } catch (error) {
+      showToast(`删除失败：${(error as Error).message}`, 'danger')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleCardAction = (tool: ToolDefinition, action: CardAction) => {
     if (action === 'choose-path') {
       void choosePath(tool.id)
       return
     }
-    if (action === 'details' || !result) {
+    if (action === 'sync-repo') {
+      void executeSyncRepo(tool.id)
+      return
+    }
+    if (action === 'details') {
       setDrawerToolId(tool.id)
       return
     }
-    const instance = result.instances[0] ?? null
-    if (action === 'apply') void openPreview(tool.id, 'apply', instance)
-    if (action === 'uninstall') void openPreview(tool.id, 'uninstall', instance)
-  }
-
-  const confirmDialog = async () => {
-    if (!dialog) return
-    setDialogBusy(true)
-    setDialogError(null)
-    try {
-      const output =
-        dialog.action === 'apply'
-          ? await api.applyLocalization({
-              toolId: dialog.toolId,
-              instanceId: dialog.instance?.id ?? '',
-            })
-          : await api.uninstallLocalization({ toolId: dialog.toolId })
-      setDialog(null)
-      showToast(output.message, 'success')
-      await runDetection()
-      await refreshHistory()
-    } catch (error) {
-      setDialogError((error as Error).message)
-    } finally {
-      setDialogBusy(false)
+    if (action === 'apply') {
+      void executeApply(tool.id)
+      return
+    }
+    if (action === 'uninstall') {
+      void executeUninstall(tool.id)
     }
   }
 
@@ -393,7 +522,7 @@ export default function App() {
     }
   }
 
-  const openPath = async (kind: 'data' | 'backups' | 'plugins' | 'settings') => {
+  const openPath = async (kind: 'data' | 'backups' | 'plugins' | 'sources' | 'logs' | 'settings') => {
     try {
       await api.openPath(kind)
     } catch (error) {
@@ -456,7 +585,7 @@ export default function App() {
       setBootstrap((current) =>
         current ? { ...current, config: { ...current.config, update: output.config } } : current,
       )
-      showToast(output.config.mirror ? '镜像地址已保存' : '已恢复使用 GitHub 官方源', 'success')
+      showToast(output.config.mirror ? 'GitHub 镜像已保存（同步仓库与检查更新均生效）' : '已恢复使用 GitHub 官方源', 'success')
     } catch (error) {
       showToast(`保存镜像地址失败：${(error as Error).message}`, 'danger')
     }
@@ -473,7 +602,7 @@ export default function App() {
   const resetFilters = () => {
     setQuery('')
     setStatusFilter('all')
-    setInstalledOnly(true)
+    setInstalledOnly(false)
   }
 
   if (!bootstrap) {
@@ -485,14 +614,15 @@ export default function App() {
     )
   }
 
-  const pageTitle = page === 'apps' ? '软件管理' : page === 'history' ? '操作记录' : '设置'
+  const pageTitle = page === 'apps' ? '多软件 GitHub 汉化工作台' : page === 'history' ? '操作记录' : '设置'
   const releaseDate = formatReleaseDate(updateStatus?.releaseDate ?? null)
+  const sep = bootstrap.platform === 'win32' ? '\\' : '/'
   const pageSubtitle =
     page === 'apps'
-      ? '检测本机已安装的 AI 工具，查看汉化状态并管理汉化。'
+      ? '绑定 GitHub 汉化仓库，将繁琐的控制台命令与参数变成可视化配置，点一下直接执行。'
       : page === 'history'
-        ? '查看本软件执行过的汉化与卸载操作。'
-        : '主题、数据目录与版本信息。'
+        ? '查看仓库同步、一键汉化、附加配置与恢复原版的执行记录。'
+        : 'GitHub 镜像加速、外观主题、缓存目录与应用更新。'
 
   return (
     <div className="app-shell">
@@ -502,15 +632,15 @@ export default function App() {
           <div className="brand-mark">汉</div>
           <div className="brand-text">
             <strong>汉化管家</strong>
-            <span>中文本地化管理</span>
+            <span>GitHub 仓库配置工作台</span>
           </div>
         </div>
 
         <nav className="nav" aria-label="主导航">
           <button className={page === 'apps' ? 'nav-item active' : 'nav-item'} onClick={() => setPage('apps')}>
             <Icon name="apps" size={18} />
-            软件管理
-            <span className="nav-count">{stats.installed}</span>
+            软件工作台
+            <span className="nav-count">{tools.length}</span>
           </button>
           <button className={page === 'history' ? 'nav-item active' : 'nav-item'} onClick={() => setPage('history')}>
             <Icon name="history" size={18} />
@@ -518,7 +648,7 @@ export default function App() {
           </button>
           <button className={page === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => setPage('settings')}>
             <Icon name="settings" size={18} />
-            设置
+            设置与镜像
             {(updateStatus?.phase === 'available' || updateStatus?.phase === 'downloaded') && (
               <span className="nav-dot" aria-label="有可用更新" />
             )}
@@ -526,8 +656,8 @@ export default function App() {
         </nav>
 
         <div className="sidebar-note">
-          <Icon name="shield" size={16} />
-          <p>检测只读，不上传安装信息。写入前自动备份。</p>
+          <Icon name="sparkles" size={16} />
+          <p>每个软件绑定一个 GitHub 汉化仓库，支持一键同步最新代码与可视化参数配置。</p>
         </div>
 
         <div className="sidebar-footer">
@@ -569,7 +699,7 @@ export default function App() {
                   <input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="搜索软件、路径或版本"
+                    placeholder="搜索软件、仓库或路径"
                     aria-label="搜索软件"
                   />
                   {query && (
@@ -578,21 +708,34 @@ export default function App() {
                     </button>
                   )}
                 </label>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={busy}
+                  onClick={() => setShowCustomModal(true)}
+                >
+                  <Icon name="plug" size={16} />
+                  + 添加软件配置
+                </button>
                 {detecting ? (
                   <button className="btn btn-ghost" onClick={() => void cancelDetection()}>
                     <span className="spinner" aria-hidden="true" />
                     取消检测
                   </button>
                 ) : (
-                  <button className="btn btn-primary" onClick={() => void runDetection()}>
+                  <button className="btn btn-primary" onClick={() => void runDetection()} disabled={busy}>
                     <Icon name="refresh" size={16} />
-                    重新检测
+                    刷新状态
                   </button>
                 )}
               </>
             )}
             {page === 'history' && (
               <>
+                <button className="btn btn-ghost" onClick={() => void openPath('logs')}>
+                  <Icon name="folder" size={16} />
+                  打开日志目录
+                </button>
                 <button className="btn btn-ghost" onClick={() => void openPath('backups')}>
                   <Icon name="folder" size={16} />
                   打开备份目录
@@ -604,9 +747,9 @@ export default function App() {
               </>
             )}
             {page === 'settings' && (
-              <button className="btn btn-primary" onClick={() => void runDetection()} disabled={detecting}>
+              <button className="btn btn-primary" onClick={() => void runDetection()} disabled={detecting || busy}>
                 <Icon name="refresh" size={16} />
-                重新检测
+                重新扫描软件
               </button>
             )}
           </div>
@@ -617,18 +760,18 @@ export default function App() {
             <div className="toolbar">
               <div className="segmented" role="group" aria-label="安装筛选">
                 <button
-                  className={installedOnly ? 'seg-btn active' : 'seg-btn'}
-                  onClick={() => setInstalledOnly(true)}
-                >
-                  已安装
-                  <span>{stats.installed}</span>
-                </button>
-                <button
                   className={!installedOnly ? 'seg-btn active' : 'seg-btn'}
                   onClick={() => setInstalledOnly(false)}
                 >
-                  全部目录
+                  全部软件
                   <span>{tools.length}</span>
+                </button>
+                <button
+                  className={installedOnly ? 'seg-btn active' : 'seg-btn'}
+                  onClick={() => setInstalledOnly(true)}
+                >
+                  已检测到目录
+                  <span>{stats.installed}</span>
                 </button>
               </div>
               <div className="chip-row" role="group" aria-label="汉化状态筛选">
@@ -639,34 +782,39 @@ export default function App() {
                     onClick={() => setStatusFilter(value)}
                   >
                     {STATUS_LABELS[value]}
-                    {value === 'attention' && stats.attention > 0 && (
-                      <span className="chip-count">{stats.attention}</span>
-                    )}
                   </button>
                 ))}
               </div>
               <div className="detect-meta">
-                <span>{detecting ? '正在检测…' : `最近检测：${formatTime(lastDetected)}`}</span>
+                <span>{detecting ? '正在检测…' : `最近刷新：${formatTime(lastDetected)}`}</span>
               </div>
             </div>
 
-            {stats.attention > 0 && !detecting && (
-              <div className="notice notice-warning summary-notice">
-                <Icon name="alert" size={17} />
-                <p>{stats.attention} 个软件需要关注：版本不适配、外部汉化或状态待确认。详情中不会提供不安全的写入入口。</p>
-              </div>
-            )}
-
-            <div className="tool-grid">
-              {visibleTools.map((tool) => (
-                <ToolCard
-                  key={tool.id}
-                  tool={tool}
-                  result={results[tool.id] ?? idleResult(tool.id)}
-                  onOpen={() => setDrawerToolId(tool.id)}
-                  onAction={(action) => handleCardAction(tool, action)}
-                />
-              ))}
+            <div className="tool-grid workbench-grid">
+              {visibleTools.map((tool) => {
+                const isCardBusy = busy && activeToolId === tool.id
+                const progressText =
+                  isCardBusy && externalProgress?.toolId === tool.id
+                    ? externalProgress.message
+                    : isCardBusy
+                      ? '正在执行…'
+                      : null
+                return (
+                  <ToolCard
+                    key={tool.id}
+                    tool={tool}
+                    result={results[tool.id] ?? idleResult(tool.id)}
+                    source={sourceMap.get(tool.id) ?? null}
+                    busyMessage={progressText}
+                    disabled={busy}
+                    onOpen={() => setDrawerToolId(tool.id)}
+                    onAction={(action) => handleCardAction(tool, action)}
+                    onChangeOption={(key, value) => void handleOptionChange(tool.id, key, value)}
+                    onExtraAction={(actionId) => void executeExtraAction(tool.id, actionId)}
+                    onOpenExternal={(url) => void openExternal(url)}
+                  />
+                )
+              })}
             </div>
 
             {visibleTools.length === 0 && (
@@ -674,21 +822,13 @@ export default function App() {
                 <div className="empty-icon">
                   <Icon name="search" size={26} />
                 </div>
-                <h3>{installedOnly ? '没有发现已安装的软件' : '没有符合条件的软件'}</h3>
-                <p>
-                  {installedOnly
-                    ? '切换到「全部目录」可以查看支持列表，或手动指定未识别工具的安装路径。'
-                    : '尝试调整搜索关键词或状态筛选。'}
-                </p>
+                <h3>没有匹配的软件卡片</h3>
+                <p>可以重置筛选条件，或点击右上角「+ 添加软件配置」绑定新的软件与 GitHub 汉化仓库。</p>
                 <button className="btn btn-ghost" onClick={resetFilters}>
                   重置筛选
                 </button>
               </div>
             )}
-
-            <p className="disclaimer">
-              检测仅读取本机已知安装位置和配置，不执行参考项目脚本，也不自动安装或卸载目标软件。
-            </p>
           </section>
         )}
 
@@ -700,20 +840,26 @@ export default function App() {
                   <Icon name="history" size={26} />
                 </div>
                 <h3>还没有操作记录</h3>
-                <p>应用或卸载汉化后，结果会记录在这里；记录不包含配置内容和敏感信息。</p>
+                <p>执行同步仓库、一键汉化或恢复原版后，结果会记录在这里。</p>
               </div>
             ) : (
               <div className="history-list">
                 {history.map((entry) => (
                   <article className="history-item" key={entry.id}>
                     <span className={`history-icon ${entry.result === 'success' ? 'success' : 'danger'}`}>
-                      <Icon name={entry.action === 'apply' ? 'download' : 'trash'} size={17} />
+                      <Icon name={entry.action === 'uninstall' ? 'trash' : 'download'} size={17} />
                     </span>
                     <div className="history-body">
                       <div className="history-title">
                         <strong>{entry.toolName}</strong>
                         <span className="history-action">
-                          {entry.action === 'apply' ? '应用汉化' : '卸载汉化'}
+                          {entry.action === 'apply'
+                            ? '一键汉化'
+                            : entry.action === 'uninstall'
+                              ? '恢复原版'
+                              : entry.action === 'sync'
+                                ? '同步仓库'
+                                : entry.action}
                         </span>
                         <span className={`result-tag ${entry.result}`}>
                           {entry.result === 'success' ? '成功' : '失败'}
@@ -734,10 +880,101 @@ export default function App() {
           <section className="content settings">
             <article className="settings-card">
               <div className="settings-head">
+                <Icon name="download" size={19} />
+                <div>
+                  <h2>GitHub 镜像加速与应用更新</h2>
+                  <p>配置 GitHub 镜像后，「同步最新仓库」与「软件更新检查」都会自动优先通过镜像拉取。</p>
+                </div>
+              </div>
+
+              <div className="mirror-row" style={{ marginTop: 0 }}>
+                <label htmlFor="mirror-url">GitHub 镜像加速地址（可选）</label>
+                <div className="mirror-input">
+                  <input
+                    id="mirror-url"
+                    value={mirrorDraft}
+                    onChange={(event) => setMirrorDraft(event.target.value)}
+                    placeholder="例如 https://ghfast.top（留空则直连 GitHub）"
+                    spellCheck={false}
+                  />
+                  <button className="btn btn-primary" onClick={() => void saveMirror()} disabled={updateBusy}>
+                    保存镜像
+                  </button>
+                </div>
+              </div>
+
+              <label className="switch-row">
+                <span>
+                  <strong>启动时自动检查汉化管家更新</strong>
+                  <small>当前版本 v{bootstrap.version}</small>
+                </span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={updateStatus?.autoCheck ?? bootstrap.config.update.autoCheck}
+                  onChange={(event) => void setAutoCheck(event.target.checked)}
+                />
+              </label>
+
+              <div className="update-actions">
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => void checkUpdates()}
+                  disabled={
+                    updateBusy || updateStatus?.phase === 'checking' || updateStatus?.phase === 'downloading'
+                  }
+                >
+                  {updateStatus?.phase === 'checking' ? '正在检查…' : '检查本软件更新'}
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => void openExternal(updateStatus?.releaseUrl || bootstrap.releasesUrl)}
+                >
+                  打开 GitHub Releases
+                </button>
+                {updateStatus?.phase === 'available' && updateStatus.canAutoInstall && (
+                  <button className="btn btn-primary" onClick={() => void downloadUpdate()} disabled={updateBusy}>
+                    <Icon name="download" size={16} />
+                    下载新版本 v{updateStatus.latestVersion}
+                  </button>
+                )}
+                {updateStatus?.phase === 'downloaded' && (
+                  <button className="btn btn-primary" onClick={() => void installUpdate()}>
+                    <Icon name="refresh" size={16} />
+                    安装并重启
+                  </button>
+                )}
+              </div>
+
+              {updateStatus?.phase === 'available' && (
+                <div className="notice notice-warning update-result">
+                  <Icon name="download" size={16} />
+                  <p>
+                    发现新版本 v{updateStatus.latestVersion}（当前 v{updateStatus.currentVersion}
+                    {releaseDate && `，发布于 ${releaseDate}`}）。
+                  </p>
+                </div>
+              )}
+              {updateStatus?.phase === 'up-to-date' && (
+                <div className="notice update-result">
+                  <Icon name="check" size={16} />
+                  <p>当前已是最新版本（v{updateStatus.latestVersion ?? updateStatus.currentVersion}）。</p>
+                </div>
+              )}
+              {updateStatus?.phase === 'error' && (
+                <div className="notice notice-danger update-result">
+                  <Icon name="alert" size={16} />
+                  <p>更新检查失败：{updateStatus.error}</p>
+                </div>
+              )}
+            </article>
+
+            <article className="settings-card">
+              <div className="settings-head">
                 <Icon name="sun" size={19} />
                 <div>
-                  <h2>外观</h2>
-                  <p>主题会立即应用，并用于下次启动。</p>
+                  <h2>外观主题</h2>
+                  <p>切换浅色、深色或跟随系统主题。</p>
                 </div>
               </div>
               <div className="theme-options">
@@ -762,153 +999,27 @@ export default function App() {
 
             <article className="settings-card">
               <div className="settings-head">
-                <Icon name="download" size={19} />
-                <div>
-                  <h2>版本与更新</h2>
-                  <p>启动时自动检查版本；下载和安装都需要你确认，不静默改动机器。</p>
-                </div>
-              </div>
-              <dl className="detail-grid">
-                <div>
-                  <dt>当前版本</dt>
-                  <dd>v{bootstrap.version}</dd>
-                </div>
-                <div>
-                  <dt>更新渠道</dt>
-                  <dd>{updateStatus?.mirror ? '自定义镜像' : 'GitHub Releases'}</dd>
-                </div>
-              </dl>
-
-              <label className="switch-row">
-                <span>
-                  <strong>启动时自动检查更新</strong>
-                  <small>只读取版本信息，不会自动下载或安装。</small>
-                </span>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  checked={updateStatus?.autoCheck ?? bootstrap.config.update.autoCheck}
-                  onChange={(event) => void setAutoCheck(event.target.checked)}
-                />
-              </label>
-
-              <div className="mirror-row">
-                <label htmlFor="mirror-url">GitHub 镜像地址</label>
-                <div className="mirror-input">
-                  <input
-                    id="mirror-url"
-                    value={mirrorDraft}
-                    onChange={(event) => setMirrorDraft(event.target.value)}
-                    placeholder="https://镜像地址/…/releases/latest/download"
-                    spellCheck={false}
-                  />
-                  <button className="btn btn-ghost" onClick={() => void saveMirror()} disabled={updateBusy}>
-                    保存
-                  </button>
-                </div>
-                <p className="settings-hint">
-                  留空使用 GitHub 官方源。镜像需提供 <code>latest.yml</code>（Linux 为{' '}
-                  <code>latest-linux.yml</code>）和安装包；镜像可以替换更新内容，请只填写你信任的地址。
-                </p>
-              </div>
-
-              <div className="update-actions">
-                <button
-                  className="btn btn-primary"
-                  onClick={() => void checkUpdates()}
-                  disabled={
-                    updateBusy || updateStatus?.phase === 'checking' || updateStatus?.phase === 'downloading'
-                  }
-                >
-                  {updateStatus?.phase === 'checking' ? '正在检查…' : '检查更新'}
-                </button>
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => void openExternal(updateStatus?.releaseUrl || bootstrap.releasesUrl)}
-                >
-                  打开发布页
-                </button>
-                {updateStatus?.phase === 'available' && updateStatus.canAutoInstall && (
-                  <button className="btn btn-primary" onClick={() => void downloadUpdate()} disabled={updateBusy}>
-                    <Icon name="download" size={16} />
-                    下载更新
-                  </button>
-                )}
-                {updateStatus?.phase === 'downloaded' && (
-                  <button className="btn btn-primary" onClick={() => void installUpdate()}>
-                    <Icon name="refresh" size={16} />
-                    安装并重启
-                  </button>
-                )}
-              </div>
-
-              {updateStatus?.phase === 'downloading' && (
-                <div className="update-progress">
-                  <div className="progress-track">
-                    <span style={{ width: `${updateStatus.progress?.percent ?? 0}%` }} />
-                  </div>
-                  <span>{Math.round(updateStatus.progress?.percent ?? 0)}%</span>
-                </div>
-              )}
-
-              {updateStatus?.phase === 'available' && (
-                <div className="notice notice-warning update-result">
-                  <Icon name="download" size={16} />
-                  <p>
-                    发现新版本 v{updateStatus.latestVersion}（当前 v{updateStatus.currentVersion}
-                    {releaseDate && `，发布于 ${releaseDate}`}）。
-                    {updateStatus.canAutoInstall
-                      ? '点击「下载更新」，下载完成后由你确认安装。'
-                      : updateStatus.installHint}
-                  </p>
-                </div>
-              )}
-              {updateStatus?.phase === 'downloaded' && (
-                <div className="notice notice-warning update-result">
-                  <Icon name="check" size={16} />
-                  <p>更新已下载完成。点击「安装并重启」后应用会退出并完成安装。</p>
-                </div>
-              )}
-              {updateStatus?.phase === 'up-to-date' && (
-                <div className="notice update-result">
-                  <Icon name="check" size={16} />
-                  <p>已是最新版本（v{updateStatus.latestVersion ?? updateStatus.currentVersion}）。</p>
-                </div>
-              )}
-              {updateStatus?.phase === 'error' && (
-                <div className="notice notice-danger update-result">
-                  <Icon name="alert" size={16} />
-                  <p>更新失败：{updateStatus.error}</p>
-                </div>
-              )}
-              {updateStatus?.phase === 'idle' && !updateStatus.canCheck && (
-                <div className="notice update-result">
-                  <Icon name="info" size={16} />
-                  <p>{updateStatus.installHint ?? '开发模式不执行更新检查，请在已安装的版本中检查更新。'}</p>
-                </div>
-              )}
-              {updateStatus?.canCheck && !updateStatus.canAutoInstall && updateStatus.installHint && (
-                <p className="settings-hint">{updateStatus.installHint}</p>
-              )}
-              <p className="settings-hint">
-                更新检查与下载不读取也不上传本机安装与汉化信息；安装包未签名，仅校验更新元数据中的文件哈希。
-              </p>
-            </article>
-
-            <article className="settings-card">
-              <div className="settings-head">
                 <Icon name="folder" size={19} />
                 <div>
-                  <h2>数据与备份</h2>
-                  <p>所有记录保存在本机，不上传。</p>
+                  <h2>本地目录与仓库缓存</h2>
+                  <p>管理同步到本地的 GitHub 汉化仓库、备份文件与执行日志。</p>
                 </div>
               </div>
               <div className="path-row">
                 <div>
-                  <span className="label">应用数据</span>
-                  <code>{bootstrap.dataDir}</code>
+                  <span className="label">GitHub 汉化仓库缓存目录</span>
+                  <code>{`${bootstrap.dataDir}${sep}sources`}</code>
                 </div>
-                <button className="btn btn-ghost" onClick={() => void openPath('data')}>
+                <button className="btn btn-ghost" onClick={() => void openPath('sources')}>
+                  打开
+                </button>
+              </div>
+              <div className="path-row">
+                <div>
+                  <span className="label">执行日志目录</span>
+                  <code>{`${bootstrap.dataDir}${sep}logs`}</code>
+                </div>
+                <button className="btn btn-ghost" onClick={() => void openPath('logs')}>
                   打开
                 </button>
               </div>
@@ -923,62 +1034,36 @@ export default function App() {
               </div>
               <div className="path-row">
                 <div>
-                  <span className="label">Claude Code 配置</span>
+                  <span className="label">Claude Code 配置文件</span>
                   <code>{bootstrap.settingsPath}</code>
                 </div>
                 <button className="btn btn-ghost" onClick={() => void openPath('settings')}>
                   打开
                 </button>
               </div>
-              <p className="settings-hint">
-                卸载汉化时会保留历史备份；卸载管理端不会自动删除这些备份。
-              </p>
             </article>
 
             <article className="settings-card">
               <div className="settings-head">
                 <Icon name="plug" size={19} />
                 <div>
-                  <h2>内置汉化资源</h2>
-                  <p>Claude Code 简体中文插件通过官方插件扩展点加载。</p>
+                  <h2>已绑定的 GitHub 汉化仓库</h2>
+                  <p>各软件汉化脚本与词库版权归对应 GitHub 开源仓库作者所有。</p>
                 </div>
               </div>
-              <dl className="detail-grid">
-                <div>
-                  <dt>插件版本</dt>
-                  <dd>{bootstrap.pluginSource.version ?? '不可用'}</dd>
+              {bootstrap.externalSources.map((source) => (
+                <div className="path-row" key={source.id}>
+                  <div>
+                    <span className="label">{source.name}</span>
+                    <code>
+                      {source.repo}@{source.branch || 'main'}
+                    </code>
+                  </div>
+                  <button className="btn btn-ghost" onClick={() => void openExternal(source.homepage)}>
+                    打开 GitHub
+                  </button>
                 </div>
-                <div>
-                  <dt>插件要求</dt>
-                  <dd>Claude Code CLI ≥ 2.1.287</dd>
-                </div>
-                <div>
-                  <dt>应用版本</dt>
-                  <dd>v{bootstrap.version}</dd>
-                </div>
-                <div>
-                  <dt>平台</dt>
-                  <dd>
-                    {bootstrap.platform === 'win32'
-                      ? 'Windows'
-                      : bootstrap.platform === 'darwin'
-                        ? 'macOS'
-                        : bootstrap.platform === 'linux'
-                          ? 'Linux'
-                          : bootstrap.platform}
-                  </dd>
-                </div>
-              </dl>
-              {bootstrap.pluginSource.error && (
-                <div className="notice notice-danger">
-                  <Icon name="alert" size={16} />
-                  <p>{bootstrap.pluginSource.error}</p>
-                </div>
-              )}
-              <p className="settings-hint">
-                插件覆盖斜杠命令说明、/config、Spinner、提示行、通知等部分界面；权限对话框等位置由
-                Claude Code 引擎独占绘制，无法汉化。
-              </p>
+              ))}
             </article>
           </section>
         )}
@@ -988,26 +1073,29 @@ export default function App() {
         <DetailsDrawer
           tool={drawerTool}
           result={drawerResult}
+          source={drawerSource}
           instanceId={selectedInstanceIds[drawerTool.id] ?? null}
           manualPath={manualPath(drawerTool.id)}
           onSelectInstance={(id) => setSelectedInstanceIds((current) => ({ ...current, [drawerTool.id]: id }))}
           onClose={() => setDrawerToolId(null)}
-          onApply={(instance) => void openPreview(drawerTool.id, 'apply', instance)}
-          onUninstall={(instance) => void openPreview(drawerTool.id, 'uninstall', instance)}
+          onApply={(instance) => void executeApply(drawerTool.id, instance)}
+          onUninstall={(instance) => void executeUninstall(drawerTool.id, instance)}
           onChoosePath={() => void choosePath(drawerTool.id)}
           onClearPath={() => void clearPath(drawerTool.id)}
+          onSaveRepo={(repoConfig, andSync) => void handleSaveRepo(drawerTool.id, repoConfig, andSync)}
+          onSyncRepo={() => void executeSyncRepo(drawerTool.id)}
+          onRemoveCustomTool={drawerTool.custom ? () => void handleRemoveCustomTool(drawerTool.id) : undefined}
+          onOpenLink={(url) => void openExternal(url)}
           busy={busy || detecting}
         />
       )}
 
-      {dialog && (
-        <ConfirmDialog
-          plan={dialog.plan}
-          busy={dialogBusy}
-          error={dialogError}
-          onConfirm={() => void confirmDialog()}
+      {showCustomModal && (
+        <CustomToolModal
+          busy={busy}
+          onSave={handleSaveCustomTool}
           onClose={() => {
-            if (!dialogBusy) setDialog(null)
+            if (!busy) setShowCustomModal(false)
           }}
         />
       )}

@@ -1879,6 +1879,343 @@ code {
   }
 }
 
+/* ---------- Workbench Card & Repo Controls ---------- */
+
+.workbench-grid {
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  align-items: stretch;
+}
+
+.workbench-card {
+  cursor: default;
+  gap: 11px;
+  padding: 16px 18px;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.version-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'Cascadia Code', Consolas, monospace;
+}
+
+.card-path-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 3.5%, transparent);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.card-path-bar svg {
+  flex: 0 0 auto;
+}
+
+.mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-soft);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.mini-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.repo-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 11px;
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
+  background: color-mix(in srgb, var(--primary) 4.5%, transparent);
+}
+
+.repo-bar-main {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.repo-label {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.repo-slug-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 0;
+  background: color-mix(in srgb, var(--bg-elev) 85%, transparent);
+  color: var(--primary);
+  font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.repo-slug-btn:hover {
+  text-decoration: underline;
+}
+
+.repo-branch {
+  color: var(--muted);
+  font-size: 11px;
+  font-family: 'Cascadia Code', Consolas, monospace;
+}
+
+.repo-cache-tag {
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 99px;
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.repo-cache-tag.ready {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.repo-cache-tag.pending {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--muted);
+}
+
+.repo-bar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.card-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 11px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--text) 2.2%, transparent);
+}
+
+.opt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.opt-toggle {
+  cursor: pointer;
+}
+
+.opt-toggle input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.opt-label {
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-soft);
+}
+
+.opt-select {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.opt-select.full-width {
+  width: 100%;
+  height: 34px;
+}
+
+.extra-actions-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+}
+
+.extra-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip-action-btn {
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-soft);
+  font-size: 11.5px;
+  font-weight: 600;
+  transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease;
+}
+
+.chip-action-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.card-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border-radius: 9px;
+  background: var(--info-soft);
+  color: var(--info);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.workbench-foot {
+  padding-top: 4px;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.preset-box {
+  margin-bottom: 12px;
+}
+
+.preset-box .label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.preset-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--text) 2.5%, transparent);
+  text-align: left;
+}
+
+.preset-btn.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.preset-btn strong {
+  font-size: 12.5px;
+  font-family: 'Cascadia Code', Consolas, monospace;
+}
+
+.preset-btn span {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.form-field > span {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.form-field input {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.drawer-repo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.drawer-foot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drawer-foot-row .btn {
+  width: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

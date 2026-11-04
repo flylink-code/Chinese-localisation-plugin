@@ -10,6 +10,8 @@ const {
   mergePluginDir,
   removePluginDir,
   splitPluginDirs,
+  disableExternalPlugins,
+  restoreExternalPlugins,
   createClaudeCodeLocalization,
 } = require('../core/localization/claude-code.cjs')
 const { createStateStore, createHistoryStore } = require('../core/store.cjs')
@@ -126,6 +128,135 @@ test('apply 与 uninstall 完成可恢复闭环并保留用户后续修改', asy
     assert.equal(history.length, 2)
     assert.equal(history[0].action, 'uninstall')
     assert.equal(history[1].action, 'apply')
+  } finally {
+    await fsp.rm(root, { recursive: true, force: true })
+  }
+})
+
+test('disableExternalPlugins 只停用已启用的条目并记录原值', () => {
+  const settings = { enabledPlugins: { 'a@m': true, 'b@m': false }, language: 'zh-CN' }
+  const output = disableExternalPlugins(settings, [
+    { id: 'a@m', name: 'a' },
+    { id: 'b@m', name: 'b' },
+  ])
+  assert.equal(output.settings.enabledPlugins['a@m'], false)
+  assert.equal(output.settings.enabledPlugins['b@m'], false)
+  assert.deepEqual(output.disabled, [{ id: 'a@m', name: 'a', previous: true }])
+  assert.equal(output.settings.language, 'zh-CN')
+  assert.equal(settings.enabledPlugins['a@m'], true, '不修改传入对象')
+  assert.throws(
+    () => disableExternalPlugins({ enabledPlugins: [] }, [{ id: 'a@m' }]),
+    /enabledPlugins 不是对象/,
+  )
+})
+
+test('restoreExternalPlugins 只恢复仍由本软件停用的条目', () => {
+  const record = [{ id: 'a@m', name: 'a', previous: true }]
+  const restored = restoreExternalPlugins({ enabledPlugins: { 'a@m': false } }, record)
+  assert.equal(restored.settings.enabledPlugins['a@m'], true)
+  assert.deepEqual(restored.restored, record)
+
+  const userChanged = restoreExternalPlugins({ enabledPlugins: { 'a@m': true } }, record)
+  assert.equal(userChanged.settings.enabledPlugins['a@m'], true)
+  assert.deepEqual(userChanged.restored, [], '用户手动恢复后不重复写入')
+})
+
+test('restoreExternalPlugins 对原本未登记启用的插件删除该字段', () => {
+  const record = [{ id: 'a@m', name: 'a', previous: null }]
+  const restored = restoreExternalPlugins({ enabledPlugins: { 'a@m': false } }, record)
+  assert.equal(restored.settings.enabledPlugins, undefined)
+  assert.deepEqual(restored.restored, record)
+})
+
+test('接管外部汉化后停用插件，卸载时恢复', async () => {
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'localiser-takeover-'))
+  try {
+    const sourceDir = path.join(root, 'source')
+    for (const [relative, content] of [
+      ['.claude-plugin/plugin.json', JSON.stringify({ name: 'cc-zh', version: '0.1.0', license: 'MIT' })],
+      ['hooks/hooks.json', '{}'],
+      ['hooks/register.tsx', ''],
+      ['dict.json', '{}'],
+      ['LICENSE', 'MIT'],
+    ]) {
+      const file = path.join(sourceDir, relative)
+      await fsp.mkdir(path.dirname(file), { recursive: true })
+      await fsp.writeFile(file, content)
+    }
+    const settingsPath = path.join(root, 'home', '.claude', 'settings.json')
+    await fsp.mkdir(path.dirname(settingsPath), { recursive: true })
+    await fsp.writeFile(
+      settingsPath,
+      JSON.stringify({
+        enabledPlugins: { 'claude-code-zh-cn@claude-code-zh-cn': true, 'other@market': true },
+      }),
+    )
+    const service = createClaudeCodeLocalization({
+      settingsPath,
+      pluginRoot: path.join(root, 'userData', 'plugins'),
+      backupRoot: path.join(root, 'userData', 'backups'),
+      sourcePluginDir: sourceDir,
+      stateStore: createStateStore(path.join(root, 'userData', 'state.json')),
+      historyStore: createHistoryStore(path.join(root, 'userData', 'history.json')),
+    })
+    const external = [{ id: 'claude-code-zh-cn@claude-code-zh-cn', name: 'claude-code-zh-cn', enabled: true }]
+
+    await service.apply({ id: 'x' }, { externalPlugins: external })
+    let settings = JSON.parse(await fsp.readFile(settingsPath, 'utf8'))
+    assert.equal(settings.enabledPlugins['claude-code-zh-cn@claude-code-zh-cn'], false)
+    assert.equal(settings.enabledPlugins['other@market'], true, '保留无关插件设置')
+
+    const state = await service.inspect()
+    assert.deepEqual(state.state.disabledPlugins, [
+      { id: 'claude-code-zh-cn@claude-code-zh-cn', name: 'claude-code-zh-cn', previous: true },
+    ])
+
+    await service.uninstall()
+    settings = JSON.parse(await fsp.readFile(settingsPath, 'utf8'))
+    assert.equal(settings.enabledPlugins['claude-code-zh-cn@claude-code-zh-cn'], true)
+    assert.equal(settings.enabledPlugins['other@market'], true)
+  } finally {
+    await fsp.rm(root, { recursive: true, force: true })
+  }
+})
+
+test('卸载时不覆盖用户之后重新启用的外部插件', async () => {
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'localiser-restore-'))
+  try {
+    const sourceDir = path.join(root, 'source')
+    for (const [relative, content] of [
+      ['.claude-plugin/plugin.json', JSON.stringify({ name: 'cc-zh', version: '0.1.0' })],
+      ['hooks/hooks.json', '{}'],
+      ['hooks/register.tsx', ''],
+      ['dict.json', '{}'],
+    ]) {
+      const file = path.join(sourceDir, relative)
+      await fsp.mkdir(path.dirname(file), { recursive: true })
+      await fsp.writeFile(file, content)
+    }
+    const settingsPath = path.join(root, 'settings.json')
+    await fsp.writeFile(
+      settingsPath,
+      JSON.stringify({ enabledPlugins: { 'claude-code-zh-cn@claude-code-zh-cn': true } }),
+    )
+    const service = createClaudeCodeLocalization({
+      settingsPath,
+      pluginRoot: path.join(root, 'plugins'),
+      backupRoot: path.join(root, 'backups'),
+      sourcePluginDir: sourceDir,
+      stateStore: createStateStore(path.join(root, 'state.json')),
+      historyStore: createHistoryStore(path.join(root, 'history.json')),
+    })
+    const external = [{ id: 'claude-code-zh-cn@claude-code-zh-cn', name: 'claude-code-zh-cn', enabled: true }]
+    await service.apply({ id: 'x' }, { externalPlugins: external })
+
+    const settings = JSON.parse(await fsp.readFile(settingsPath, 'utf8'))
+    settings.enabledPlugins['claude-code-zh-cn@claude-code-zh-cn'] = true
+    await fsp.writeFile(settingsPath, JSON.stringify(settings))
+    await service.uninstall()
+
+    const after = JSON.parse(await fsp.readFile(settingsPath, 'utf8'))
+    assert.equal(after.enabledPlugins['claude-code-zh-cn@claude-code-zh-cn'], true)
   } finally {
     await fsp.rm(root, { recursive: true, force: true })
   }
