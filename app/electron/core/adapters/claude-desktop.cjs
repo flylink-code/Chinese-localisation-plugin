@@ -84,7 +84,7 @@ async function inspectDesktopApp(appDir, extra) {
     }
   }
 
-  return { resources, localization, valid: resourcesExists && (exe || appAsar || ionDistAsar || ionDistDir) }
+  return { resources, localization, valid: resourcesExists && (exe || appAsar || ionDistAsar || ionDistDir), evidence }
 }
 
 async function appxInstances() {
