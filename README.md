@@ -26,7 +26,7 @@
 - 已在 Windows 11 实机完成三类软件的真实只读检测（Claude Code CLI 2.1.316、Claude Desktop 4.4212.0、Antigravity 2.27.0）。
 - 已在隔离用户目录完成 Claude Code「应用汉化 → 状态刷新 → 卸载汉化 → 原配置恢复」流程验证，未修改本机真实用户配置。
 - 已在 WSL Ubuntu 22.04 的隔离 HOME 中验证 Linux 检测路径及 Claude Code 应用/卸载闭环；AppImage 与 deb 在 WSL 中构建成功。
-- 已验证更新链路（`0.1.2` 打包应用 + 本地 HTTPS 镜像）：保存镜像地址、检查到新版本、下载并完成 sha512 校验，设置页「已下载」状态截图核对通过；GitHub 官方源路径已确认会读取 Release 的 `latest.yml`。真实安装包覆盖安装与重启、AppImage 自动替换尚未验证。
+- 已验证更新链路：`0.1.3` 打包应用通过 GitHub 官方源检查并显示已是最新；配置本地 HTTPS 镜像后可检查到模拟新版本、下载并完成 sha512 校验，设置页「已下载」状态截图核对通过。真实安装包覆盖安装与重启、AppImage 自动替换尚未验证。
 - **尚未验证** Claude Code 启动后的中文界面效果、真实用户默认配置下的应用、Desktop / Antigravity 写入、安装包在干净 Windows / Ubuntu 机器上的安装与启动、macOS 支持。
 
 ## 2. 快速开始
