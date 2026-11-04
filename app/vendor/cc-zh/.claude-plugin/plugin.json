@@ -1,0 +1,8 @@
+{
+  "name": "cc-zh",
+  "version": "0.1.0",
+  "description": "Claude Code 简体中文 UI mod —— 以静态词典把斜杠命令说明、/config 项、Spinner 词、提示与通知显示为中文。零 token、零网络、不碰官方产物。",
+  "author": { "name": "jnq" },
+  "license": "MIT",
+  "keywords": ["chinese", "zh-CN", "i18n", "localization", "translation", "claude-code-mod"]
+}

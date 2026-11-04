@@ -1,0 +1,33 @@
+{
+  "name": "chinese-localiser",
+  "version": "0.1.0",
+  "private": true,
+  "description": "多工具中文本地化管理软件：检测安装、查看汉化状态、应用与卸载汉化",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flylink-code/Chinese-localisation-plugin.git"
+  },
+  "homepage": "https://github.com/flylink-code/Chinese-localisation-plugin#readme",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "sync:plugin": "node scripts/sync-bundled-plugin.cjs",
+    "build": "npm run sync:plugin && vite build",
+    "start": "electron .",
+    "dev": "npm run build && electron .",
+    "test": "node --test \"electron/test/*.test.cjs\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "electron": "^45.2.2",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.5"
+  }
+}

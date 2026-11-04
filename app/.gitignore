@@ -1,0 +1,6 @@
+node_modules/
+dist/
+resources/plugins/
+screenshot-*.png
+.e2e-profile
+.real-settings-hash
