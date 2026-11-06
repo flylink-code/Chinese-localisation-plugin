@@ -1,6 +1,6 @@
 {
   "name": "chinese-localiser",
-  "version": "0.1.5",
+  "version": "0.1.0",
   "private": true,
   "description": "基于 GitHub 汉化仓库的多软件可视化配置与一键汉化工具",
   "desktopName": "chinese-localiser.desktop",
@@ -51,7 +51,7 @@
       "repo": "Chinese-localisation-plugin"
     },
     "directories": {
-      "output": "release",
+      "output": "../dist",
       "buildResources": "build"
     },
     "files": [

@@ -8,7 +8,7 @@
 - 当前能力：三工具真实只读检测与汉化状态检查；Claude Code CLI 通过官方插件扩展点支持应用/卸载汉化，Windows 与 Ubuntu 均可用。Claude Desktop 支持按需下载固定提交的社区源并通过 UAC 提权运行上游安装/卸载器（真实提权流程尚未验收）；Antigravity 社区源受上游词典版本限制，本机 v2.27.0 不开放写入。
 - 安装包：Windows NSIS、Ubuntu AppImage/deb，由 electron-builder 构建；`vX.Y.Z` 标签触发 GitHub Actions 构建并上传 Release。安装包未签名，不宣称已通过干净环境安装验收。
 - 验证范围记录在 [doc/support-matrix.md](doc/support-matrix.md)；隔离环境流程验证不等于真实客户端界面验收，未验证项不得写成已支持。
-- 版本号唯一来源为 [app/package.json](app/package.json)，变更需同步 [CHANGELOG.md](CHANGELOG.md)；发布使用 `vX.Y.Z` 标签与同名 GitHub Release。设置页可配置启动时自动检查更新与 GitHub 镜像；下载与安装都必须由用户确认，不静默安装。Release 必须附带 `latest.yml`（Linux 为 `latest-linux.yml`）供更新客户端读取。
+- 版本号唯一来源为 [app/package.json](app/package.json)，变更需同步 [CHANGELOG.md](CHANGELOG.md)；构建产物按版本保存在仓库根目录 `dist/`，不再创建 GitHub Release，`dist/` 同时保留 `latest.yml`（Linux 为 `latest-linux.yml`）供更新客户端读取。设置页可配置启动时自动检查更新与 GitHub 镜像；下载与安装都必须由用户确认，不静默安装。
 - 产品须有现代化桌面 UI：先完成主页、已安装软件检测与汉化状态检查，再逐工具接入应用汉化及卸载汉化；UI 和只读检测不等待写入引擎完成。
 - 首批检查 Claude Code、Claude Desktop、Antigravity，example 下项目仅作参考，不直接执行，也不将参考项目支持当作本项目已验证支持。
 - 卸载汉化指恢复本管理器可验证的改动，不是卸载目标软件；安装状态、汉化状态与可操作能力分别表达。

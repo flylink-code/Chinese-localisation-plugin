@@ -1,6 +1,6 @@
 # Multi-tool GitHub Chinese Localization Workbench
 
-A desktop workbench (`v0.1.5`) that automatically detects installed instances of Claude Code, Claude Desktop, Antigravity, Cursor, Codex Desktop, Kiro IDE, and OpenCode, binds them to active GitHub Chinese localization repositories, and provides visual configuration and one-click localization/restoration.
+A desktop workbench (`v0.1.0`) that automatically detects installed instances of Claude Code, Claude Desktop, Antigravity, Cursor, Codex Desktop, Kiro IDE, and OpenCode, binds them to active GitHub Chinese localization repositories, and provides visual configuration and one-click localization/restoration.
 
 > Current status: runnable MVP. Real detection and localization checks cover all three tools. Claude Code applies and uninstalls localization through the official plugin extension point. Claude Desktop downloads a pinned community source (commit + SHA-256, UAC elevation) and runs its installer on user confirmation; the real elevated install is not yet accepted on a physical machine. Antigravity's upstream dictionary only matches v2.28.2, so writes stay disabled on other versions. Supported versions and verification scope are recorded in the [support matrix](doc/support-matrix.md) (Chinese).
 
@@ -25,7 +25,7 @@ A desktop workbench (`v0.1.5`) that automatically detects installed instances of
 
 Requirements: Windows 10/11 or Ubuntu 22.04+, Node.js 20+.
 
-Installers are published on GitHub Releases: a Windows NSIS installer plus Ubuntu AppImage and deb. They are unsigned; AppImage requires `libfuse2` and its desktop entry uses `--no-sandbox` (Electron AppImage limitation), so prefer the deb when the Chromium sandbox matters.
+Build artifacts are stored in the repository-root `dist/` directory (`ChineseLocaliser-0.1.0-windows-x64.exe` plus Ubuntu AppImage and deb when built on Linux). They are not published as GitHub Releases. Installers are unsigned; AppImage requires `libfuse2` and its desktop entry uses `--no-sandbox` (Electron AppImage limitation), so prefer the deb when the Chromium sandbox matters.
 
 ```bash
 cd app
@@ -47,11 +47,11 @@ If your environment sets `ELECTRON_RUN_AS_NODE=1`, launch with `env -u ELECTRON_
 ### Versioning and releases
 
 - `app/package.json` `version` is the single source of truth; the UI and update check read it.
-- To release: bump the version and [CHANGELOG.md](CHANGELOG.md), commit, tag `vX.Y.Z`, and publish a GitHub Release with the same tag.
+- To build: bump the version and [CHANGELOG.md](CHANGELOG.md), then run `cd app && npm run dist:win`; artifacts land in the repository-root `dist/` and different versions keep separate file names.
+- GitHub Releases are no longer used; `dist/` also keeps `latest.yml`, installers, and blockmaps for local distribution.
 - Settings checks for the latest version; "Download update" verifies the sha512 in the update metadata; "Install and restart" runs only after user confirmation and never installs on quit.
 - Custom GitHub mirrors are supported: the mirror must serve `latest.yml` (`latest-linux.yml` on Linux) plus installers, and is used for both version checks and downloads. A mirror can replace update content, so only trusted addresses should be configured.
-- The release workflow verifies and uploads `latest.yml` / `latest-linux.yml`; a build fails when the metadata is missing.
-- Current version is `0.1.3`, with Windows and Ubuntu installers. Pushing a `vX.Y.Z` tag builds and uploads them via GitHub Actions.
+- Current version is `0.1.0`, with Windows and Ubuntu installers built by GitHub Actions or locally.
 
 ## Third-party localization credits
 

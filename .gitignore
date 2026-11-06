@@ -1,0 +1,4 @@
+# 构建产物：按版本保存在 dist/，不提交到仓库
+dist/
+
+node_modules/

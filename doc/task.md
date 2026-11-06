@@ -88,4 +88,4 @@
 
 - [x] R3-01：更新单元测试，覆盖动态仓库配置、参数拼接、Antigravity 全版本开放、Claude Desktop 多动作脚本生成与 Claude Code 仓库同步。
 - [x] R3-02：在本机完成 Antigravity `v2.27.0` 与 Claude Code 的真实仓库同步及配置测试。
-- [x] R3-03：重新打包 Windows 安装程序（`0.1.5`）并静默更新到 `F:\software\chinese-localiser`，启动实机界面核对。
+- [x] R3-03：Windows 安装程序改为输出到仓库根目录 `dist/`（版本 `0.1.0`），并更新本机 `F:\software\chinese-localiser`。

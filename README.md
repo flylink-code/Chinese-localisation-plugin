@@ -2,7 +2,7 @@
 
 面向 Claude Code、Claude Desktop、Antigravity、Cursor、Codex Desktop、Kiro IDE、OpenCode 等常用 AI Agent 工具的可视化汉化配置桌面应用，支持 Windows 与 Ubuntu。主页自动检测本机已安装实例、绑定近期活跃 GitHub 汉化仓库，将繁琐的控制台命令与菜单转换为卡片上的可视化配置，点一下直接完成汉化或恢复原版。
 
-> 当前版本为 `0.1.5`：主页默认内置 7 款主流 AI Agent 软件卡片（Claude Code、Claude Desktop、Antigravity、Cursor、Codex Desktop、Kiro、OpenCode）并支持多预设源切换、一键同步最新 GitHub 分支代码及「+ 添加软件配置」自定义扩展。支持的版本与生态清单见 [doc/ecosystem.md](doc/ecosystem.md) 与 [支持矩阵](doc/support-matrix.md)。
+> 当前版本为 `0.1.0`：主页默认内置 7 款主流 AI Agent 软件卡片（Claude Code、Claude Desktop、Antigravity、Cursor、Codex Desktop、Kiro、OpenCode）并支持多预设源切换、一键同步最新 GitHub 分支代码及「+ 添加软件配置」自定义扩展。构建产物按版本保存在仓库根目录 [dist/](dist/)，不再发布 GitHub Release。支持的版本与生态清单见 [doc/ecosystem.md](doc/ecosystem.md) 与 [支持矩阵](doc/support-matrix.md)。
 
 ## 1. 已实现能力
 
@@ -35,10 +35,10 @@
 
 ### 安装包
 
-从 [GitHub Releases](https://github.com/flylink-code/Chinese-localisation-plugin/releases) 下载：
+构建产物保存在仓库根目录 `dist/`：
 
-- Windows：`ChineseLocaliser-0.1.5-windows-x64.exe`（NSIS 安装包）。
-- Ubuntu：`ChineseLocaliser-0.1.5-linux-x86_64.AppImage` 或 `ChineseLocaliser-0.1.5-linux-amd64.deb`。
+- Windows：`dist/ChineseLocaliser-0.1.0-windows-x64.exe`（NSIS 安装包）。
+- Ubuntu：在 Linux 上执行 `npm run dist:linux` 生成 `dist/ChineseLocaliser-0.1.0-linux-x86_64.AppImage` 与 `dist/ChineseLocaliser-0.1.0-linux-amd64.deb`。
 
 安装包未签名：Windows SmartScreen 与部分 Linux 桌面环境会提示来源未知，请自行核对 Release 页面与文件哈希。Ubuntu 22.04 运行 AppImage 需要 `libfuse2`；AppImage 桌面入口使用 `--no-sandbox`（Electron AppImage 的启动限制），需要完整 Chromium 沙箱时请使用 deb。安装包内置构建时同版本的 `cc-zh` 插件。
 
@@ -74,11 +74,11 @@ env -u ELECTRON_RUN_AS_NODE npm start
 ### 版本与发布
 
 - `app/package.json` 的 `version` 是唯一版本来源，界面与更新检查均读取该值。
-- 发布步骤：更新版本号与 [CHANGELOG.md](CHANGELOG.md) → 提交 → 创建 `vX.Y.Z` 标签 → 在 GitHub 创建同名 Release。
+- 发布步骤：更新版本号与 [CHANGELOG.md](CHANGELOG.md) → 执行 `cd app && npm run dist:win`，产物直接写入仓库根目录 `dist/`；不同版本文件名互不覆盖，便于保留历史版本。
+- 不再发布 GitHub Release：`dist/` 同时保留 `latest.yml`、安装包与 blockmap 供本地分发与检查。
 - 设置页「检查更新」读取最新版本；「下载更新」下载并校验更新元数据中的 sha512；「安装并重启」由用户确认后执行，退出时不自动安装。
 - 支持自定义 GitHub 镜像：镜像需同时提供 `latest.yml`（Linux 为 `latest-linux.yml`）与安装包，版本信息与下载都走镜像；镜像可以替换更新内容，只应填写可信地址。
-- 发布工作流会校验 `latest.yml` / `latest-linux.yml` 并随安装包上传；缺少元数据时构建失败。
-- 版本为 `0.1.3`，提供 Windows 与 Ubuntu 安装包；推送 `vX.Y.Z` 标签时由 [GitHub Actions](.github/workflows/build-installers.yml) 构建并上传安装包。
+- 当前版本为 `0.1.0`，由 [GitHub Actions](.github/workflows/build-installers.yml) 或本地构建生成 Windows 与 Ubuntu 安装包。
 
 ## 3. 使用流程与状态
 

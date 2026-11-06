@@ -19,6 +19,10 @@
 | Claude Desktop | Ubuntu | 支持（deb） | 支持 | 不支持（源仅 Windows） | 不支持 | 隔离 fixture |
 | Antigravity | Windows | 支持 | 支持 | 受限（仅 v2.28.2；本机 v2.27.0） | 仅本软件安装后 | 实机检测 + fixture |
 | Antigravity | Ubuntu | 支持 | 支持 | 受限（源声明 Linux，未验证） | 仅本软件安装后 | 隔离 fixture |
+| Cursor | Windows | 支持 | 支持 | 支持（`lidefang0918/cursor-zh`、`baishi1114010/cursor-i18n-zh`） | 支持（上游还原脚本） | 实机检测 + 仓库同步 + 隔离沙盒 apply/uninstall |
+| Codex Desktop | Windows | 支持（MSIX 版本号自动解析） | 支持 | 支持（`aimiliya825/codex-desktop-zh-cn`，双入口脚本） | 支持（`Restore-CodexZh.ps1`） | 实机检测 + 仓库同步 |
+| Kiro | Windows | 支持 | 支持 | 支持（`polang233/kiro-language-pack`，简体/繁体） | 支持（`restore`） | 实机检测 + 仓库同步 |
+| OpenCode | Windows | 支持（npm 全局 `@opencode/cli`） | 支持 | 支持（`xlht4106/opencode-zh-hans`） | 支持 | 实机检测 + 仓库同步 |
 
 ## Claude Code CLI
 
@@ -81,6 +85,28 @@
 - 汉化检查：流式搜索 `app.asar` 中的 `__ANTIGRAVITY_CHINESE_LOCALIZATION_START__`，并检查 `app.asar.bak`。当前未发现标记或备份。
 - 写入方式：仅 v2.28.2 开放社区源下载与上游引擎写入，安装前要求用户完全退出客户端并以 `--no-kill` 运行；其他版本（含本机 v2.27.0）明确标记不支持并说明原因。上游项目未声明许可证，软件不内置、不再分发其代码或译文，仅在用户确认后下载执行。
 - 未验证：不同版本的注入锚点、备份版本绑定、文件占用与恢复冲突、实际界面覆盖；v2.28.2 的真实安装/卸载尚未执行。
+
+## Cursor / Codex Desktop / Kiro / OpenCode（0.1.0 新增）
+
+2026年11月06日实机检测（Windows 11）：
+
+| 工具 | 检测到的实例 | 版本与渠道 |
+| --- | --- | --- |
+| Cursor | `F:\software\cursor` | `3.27.22`，系统 PATH 安装 |
+| Codex Desktop | `C:\Program Files\WindowsApps\OpenAI.Codex_26.1027.6604.0_x64__2p2nqsd0c76g0` | `26.1027.6604.0`，MSIX |
+| Kiro | `F:\software\Kiro` | `1.4.26`，系统 PATH 安装 |
+| OpenCode | `%APPDATA%\npm\node_modules\@opencode\cli` | `2.1.2`，npm 全局安装 |
+
+已验证：
+
+- 四款工具均从登记仓库在线同步（`codeload.github.com`）并完成入口脚本校验。
+- Cursor 在隔离沙盒中完成 `apply` → `uninstall` 字节级还原；`lidefang0918/cursor-zh` 精确匹配 3.27.22（`supported: true, exact: true`）。
+- Codex Desktop 自动解析 WindowsApps MSIX 目录名得到版本号，并识别安装/恢复双入口脚本。
+
+未验证：
+
+- 四款工具的汉化脚本在本机真实安装目录上的写入与真实客户端界面效果。
+- Kiro 繁体语言包、Codex 便携版、OpenCode 词典插件在真实 TUI 中的加载效果。
 
 ## 社区汉化源（Claude Desktop / Antigravity）
 
