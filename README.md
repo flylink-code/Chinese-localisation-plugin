@@ -78,7 +78,7 @@ env -u ELECTRON_RUN_AS_NODE npm start
 - 不再发布 GitHub Release：`dist/` 同时保留 `latest.yml`、安装包与 blockmap 供本地分发与检查。
 - 设置页「检查更新」读取最新版本；「下载更新」下载并校验更新元数据中的 sha512；「安装并重启」由用户确认后执行，退出时不自动安装。
 - 支持自定义 GitHub 镜像：镜像需同时提供 `latest.yml`（Linux 为 `latest-linux.yml`）与安装包，版本信息与下载都走镜像；镜像可以替换更新内容，只应填写可信地址。
-- 当前版本为 `0.1.0`，由 [GitHub Actions](.github/workflows/build-installers.yml) 或本地构建生成 Windows 与 Ubuntu 安装包。
+- 当前版本为 `0.1.0`，由 [GitHub Actions](.github/workflows/build-installers.yml) 或本地构建生成 Windows 与 Ubuntu 安装包；CI 只上传构建制品（Artifacts），不创建 GitHub Release。
 
 ## 3. 使用流程与状态
 

@@ -51,7 +51,7 @@ If your environment sets `ELECTRON_RUN_AS_NODE=1`, launch with `env -u ELECTRON_
 - GitHub Releases are no longer used; `dist/` also keeps `latest.yml`, installers, and blockmaps for local distribution.
 - Settings checks for the latest version; "Download update" verifies the sha512 in the update metadata; "Install and restart" runs only after user confirmation and never installs on quit.
 - Custom GitHub mirrors are supported: the mirror must serve `latest.yml` (`latest-linux.yml` on Linux) plus installers, and is used for both version checks and downloads. A mirror can replace update content, so only trusted addresses should be configured.
-- Current version is `0.1.0`, with Windows and Ubuntu installers built by GitHub Actions or locally.
+- Current version is `0.1.0`, with Windows and Ubuntu installers built by GitHub Actions or locally. CI uploads build artifacts only and never creates a GitHub Release.
 
 ## Third-party localization credits
 
